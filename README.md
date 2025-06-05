@@ -1,5 +1,7 @@
 # fmesh-graphviz
 
+Export your FMesh as DOT-graph
+
 This module currently supports a single export format: [DOT](https://graphviz.org/doc/info/lang.html), the graph description language used by Graphviz for visualizing structured data. If needed, you can easily add your own export format by implementing the [Exporter](https://pkg.go.dev/github.com/hovsep/fmesh-graphviz#Exporter) interface:
 ```go
 // Exporter is the common interface for all formats
