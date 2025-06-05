@@ -4,7 +4,7 @@ go 1.24.1
 
 require (
 	github.com/emicklei/dot v1.8.0
-	github.com/hovsep/fmesh v1.1.0-Yervandashat
+	github.com/hovsep/fmesh v1.2.0-Artashat
 	github.com/stretchr/testify v1.10.0
 )
 

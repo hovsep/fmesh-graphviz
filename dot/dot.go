@@ -3,6 +3,7 @@ package dot
 import (
 	"bytes"
 	"fmt"
+	graphviz "github.com/hovsep/fmesh-graphviz"
 	"html/template"
 	"sort"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/hovsep/fmesh"
 	fmeshcomponent "github.com/hovsep/fmesh/component"
 	"github.com/hovsep/fmesh/cycle"
-	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/port"
 )
 
@@ -28,12 +28,12 @@ const (
 )
 
 // NewDotExporter returns exporter with default configuration
-func NewDotExporter() export.Exporter { //TODO: return impl not interface
+func NewDotExporter() graphviz.Exporter { //TODO: return impl not interface
 	return NewDotExporterWithConfig(defaultConfig)
 }
 
 // NewDotExporterWithConfig returns exporter with custom configuration
-func NewDotExporterWithConfig(config *Config) export.Exporter {
+func NewDotExporterWithConfig(config *Config) graphviz.Exporter {
 	return &dotExporter{
 		config: config,
 	}
