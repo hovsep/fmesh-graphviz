@@ -3,8 +3,8 @@ module github.com/hovsep/fmesh-graphviz
 go 1.24.1
 
 require (
-	github.com/emicklei/dot v1.8.0
-	github.com/hovsep/fmesh v1.2.0-Artashat
+	github.com/emicklei/dot v1.9.1
+	github.com/hovsep/fmesh v1.3.0-tigranakert
 	github.com/stretchr/testify v1.10.0
 )
 
