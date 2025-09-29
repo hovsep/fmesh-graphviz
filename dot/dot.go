@@ -3,7 +3,6 @@ package dot
 import (
 	"bytes"
 	"fmt"
-	graphviz "github.com/hovsep/fmesh-graphviz"
 	"html/template"
 	"sort"
 
@@ -19,6 +18,7 @@ type statEntry struct {
 	Value int
 }
 
+// dotExporter implements the graphviz.Exporter interface
 type dotExporter struct {
 	config *Config
 }
@@ -28,12 +28,12 @@ const (
 )
 
 // NewDotExporter returns exporter with default configuration
-func NewDotExporter() graphviz.Exporter { //TODO: return impl not interface
+func NewDotExporter() *dotExporter {
 	return NewDotExporterWithConfig(defaultConfig)
 }
 
 // NewDotExporterWithConfig returns exporter with custom configuration
-func NewDotExporterWithConfig(config *Config) graphviz.Exporter {
+func NewDotExporterWithConfig(config *Config) *dotExporter {
 	return &dotExporter{
 		config: config,
 	}
