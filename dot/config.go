@@ -4,7 +4,7 @@ import fmeshcomponent "github.com/hovsep/fmesh/component"
 
 type attributesMap map[string]string
 
-// ComponentConfig defines the configuration for the component visualization
+// ComponentConfig defines the configuration for the component visualization.
 type ComponentConfig struct {
 	Subgraph                                 attributesMap
 	SubgraphNodeBaseAttrs                    attributesMap
@@ -14,23 +14,23 @@ type ComponentConfig struct {
 	SubgraphAttributesByActivationResultCode map[fmeshcomponent.ActivationResultCode]attributesMap
 }
 
-// PortConfig defines the configuration for the port visualization
+// PortConfig defines the configuration for the port visualization.
 type PortConfig struct {
 	Node attributesMap
 }
 
-// LegendConfig defines the configuration for the legend visualization
+// LegendConfig defines the configuration for the legend visualization.
 type LegendConfig struct {
 	Subgraph attributesMap
 	Node     attributesMap
 }
 
-// PipeConfig defines the configuration for the pipe visualization
+// PipeConfig defines the configuration for the pipe visualization.
 type PipeConfig struct {
 	Edge attributesMap
 }
 
-// Config defines the configuration for the dot exporter
+// Config defines the configuration for the dot exporter.
 type Config struct {
 	MainGraph attributesMap
 	Component ComponentConfig
