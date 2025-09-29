@@ -18,8 +18,8 @@ type statEntry struct {
 	Value int
 }
 
-// dotExporter implements the graphviz.Exporter interface
-type dotExporter struct {
+// Exporter implements the graphviz.Exporter interface.
+type Exporter struct {
 	config *Config
 }
 
@@ -27,20 +27,20 @@ const (
 	nodeIDLabel = "export/dot/id"
 )
 
-// NewDotExporter returns exporter with default configuration
-func NewDotExporter() *dotExporter {
+// NewDotExporter returns exporter with default configuration.
+func NewDotExporter() *Exporter {
 	return NewDotExporterWithConfig(defaultConfig)
 }
 
-// NewDotExporterWithConfig returns exporter with custom configuration
-func NewDotExporterWithConfig(config *Config) *dotExporter {
-	return &dotExporter{
+// NewDotExporterWithConfig returns exporter with custom configuration.
+func NewDotExporterWithConfig(config *Config) *Exporter {
+	return &Exporter{
 		config: config,
 	}
 }
 
-// Export returns the f-mesh as DOT-graph
-func (d *dotExporter) Export(fm *fmesh.FMesh) ([]byte, error) {
+// Export returns the f-mesh as DOT-graph.
+func (d *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
 	if fm.Components().Len() == 0 {
 		return nil, nil
 	}
@@ -57,8 +57,8 @@ func (d *dotExporter) Export(fm *fmesh.FMesh) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// ExportWithCycles returns multiple graphs showing the state of the given f-mesh in each activation cycle
-func (d *dotExporter) ExportWithCycles(fm *fmesh.FMesh, activationCycles cycle.Cycles) ([][]byte, error) {
+// ExportWithCycles returns multiple graphs showing the state of the given f-mesh in each activation cycle.
+func (d *Exporter) ExportWithCycles(fm *fmesh.FMesh, activationCycles cycle.Cycles) ([][]byte, error) {
 	if fm.Components().Len() == 0 {
 		return nil, nil
 	}
@@ -85,8 +85,8 @@ func (d *dotExporter) ExportWithCycles(fm *fmesh.FMesh, activationCycles cycle.C
 }
 
 // buildGraph returns f-mesh as a graph
-// activationCycle may be passed optionally to get a representation of f-mesh in a given activation cycle
-func (d *dotExporter) buildGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) (*dot.Graph, error) {
+// activationCycle may be passed optionally to get a representation of f-mesh in a given activation cycle.
+func (d *Exporter) buildGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) (*dot.Graph, error) {
 	mainGraph, err := d.getMainGraph(fm, activationCycle)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get main graph: %w", err)
@@ -109,8 +109,8 @@ func (d *dotExporter) buildGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) 
 	return mainGraph, nil
 }
 
-// getMainGraph creates and returns the main (root) graph
-func (d *dotExporter) getMainGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) (*dot.Graph, error) {
+// getMainGraph creates and returns the main (root) graph.
+func (d *Exporter) getMainGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) (*dot.Graph, error) {
 	graph := dot.NewGraph(dot.Directed)
 
 	setAttrMap(&graph.AttributesMap, d.config.MainGraph)
@@ -123,8 +123,8 @@ func (d *dotExporter) getMainGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle
 	return graph, nil
 }
 
-// addPipes adds pipes representation to the graph
-func (d *dotExporter) addPipes(graph *dot.Graph, components fmeshcomponent.Map) error {
+// addPipes adds pipes representation to the graph.
+func (d *Exporter) addPipes(graph *dot.Graph, components fmeshcomponent.Map) error {
 	for _, c := range components {
 		srcPorts, err := c.Outputs().Ports()
 		if err != nil {
@@ -165,8 +165,8 @@ func (d *dotExporter) addPipes(graph *dot.Graph, components fmeshcomponent.Map) 
 	return nil
 }
 
-// addComponents adds components representation to the graph
-func (d *dotExporter) addComponents(graph *dot.Graph, components fmeshcomponent.Map, activationCycle *cycle.Cycle) error {
+// addComponents adds components representation to the graph.
+func (d *Exporter) addComponents(graph *dot.Graph, components fmeshcomponent.Map, activationCycle *cycle.Cycle) error {
 	for _, c := range components {
 		// Component
 		var activationResult *fmeshcomponent.ActivationResult
@@ -199,8 +199,8 @@ func (d *dotExporter) addComponents(graph *dot.Graph, components fmeshcomponent.
 	return nil
 }
 
-// getPortNode creates and returns a node representing one port
-func (d *dotExporter) getPortNode(c *fmeshcomponent.Component, p *port.Port, componentSubgraph *dot.Graph) *dot.Node {
+// getPortNode creates and returns a node representing one port.
+func (d *Exporter) getPortNode(c *fmeshcomponent.Component, p *port.Port, componentSubgraph *dot.Graph) *dot.Node {
 	portID := getPortID(c.Name(), p.LabelOrDefault(port.DirectionLabel, ""), p.Name())
 
 	// Mark ports to be able to find their respective nodes later when adding pipes
@@ -212,8 +212,8 @@ func (d *dotExporter) getPortNode(c *fmeshcomponent.Component, p *port.Port, com
 	return &portNode
 }
 
-// getComponentSubgraph creates component subgraph and returns it
-func (d *dotExporter) getComponentSubgraph(graph *dot.Graph, component *fmeshcomponent.Component, activationResult *fmeshcomponent.ActivationResult) *dot.Graph {
+// getComponentSubgraph creates component subgraph and returns it.
+func (d *Exporter) getComponentSubgraph(graph *dot.Graph, component *fmeshcomponent.Component, activationResult *fmeshcomponent.ActivationResult) *dot.Graph {
 	componentSubgraph := graph.Subgraph("id-subgraph-"+component.Name(), dot.ClusterOption{})
 	componentSubgraph.NodeInitializer(func(n dot.Node) {
 		setAttrMap(&n.AttributesMap, d.config.Component.SubgraphNodeBaseAttrs)
@@ -233,8 +233,8 @@ func (d *dotExporter) getComponentSubgraph(graph *dot.Graph, component *fmeshcom
 	return componentSubgraph
 }
 
-// getComponentNode creates component node and returns it
-func (d *dotExporter) getComponentNode(componentSubgraph *dot.Graph, component *fmeshcomponent.Component, activationResult *fmeshcomponent.ActivationResult) *dot.Node {
+// getComponentNode creates component node and returns it.
+func (d *Exporter) getComponentNode(componentSubgraph *dot.Graph, component *fmeshcomponent.Component, activationResult *fmeshcomponent.ActivationResult) *dot.Node {
 	componentNode := componentSubgraph.Node("id-" + component.Name())
 	setAttrMap(&componentNode.AttributesMap, d.config.Component.Node)
 
@@ -259,8 +259,8 @@ func (d *dotExporter) getComponentNode(componentSubgraph *dot.Graph, component *
 	return &componentNode
 }
 
-// addLegend adds useful information about f-mesh and (optionally) current activation cycle
-func (d *dotExporter) addLegend(graph *dot.Graph, fm *fmesh.FMesh, activationCycle *cycle.Cycle) error {
+// addLegend adds useful information about f-mesh and (optionally) current activation cycle.
+func (d *Exporter) addLegend(graph *dot.Graph, fm *fmesh.FMesh, activationCycle *cycle.Cycle) error {
 	subgraph := graph.Subgraph("id-legend", dot.ClusterOption{})
 
 	setAttrMap(&subgraph.AttributesMap, d.config.Legend.Subgraph)
@@ -294,7 +294,7 @@ func (d *dotExporter) addLegend(graph *dot.Graph, fm *fmesh.FMesh, activationCyc
 	return nil
 }
 
-// getCycleStats returns basic cycle stats
+// getCycleStats returns basic cycle stats.
 func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
 	statsMap := map[string]*statEntry{
 		// Number of activated must be shown always
@@ -329,12 +329,12 @@ func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
 	return statsList
 }
 
-// getPortID returns unique ID used to locate ports while building pipe edges
+// getPortID returns unique ID used to locate ports while building pipe edges.
 func getPortID(componentName, portDirection, portName string) string {
 	return fmt.Sprintf("component/%s/%s/%s", componentName, portDirection, portName)
 }
 
-// setAttrMap sets all attributes to target
+// setAttrMap sets all attributes to target.
 func setAttrMap(target *dot.AttributesMap, attributes attributesMap) {
 	for attrName, attrValue := range attributes {
 		target.Attr(attrName, attrValue)

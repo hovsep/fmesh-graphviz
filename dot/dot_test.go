@@ -141,7 +141,6 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			runResult, err := tt.args.fm.Run()
 			require.NoError(t, err)
 
