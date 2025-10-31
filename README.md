@@ -1,22 +1,21 @@
 # fmesh-graphviz
 
-Export your [FMesh](https://pkg.go.dev/github.com/hovsep/fmesh) as DOT-graph
+Export your [FMesh](https://pkg.go.dev/github.com/hovsep/fmesh) as DOT-graph for powerful visualization
 
-This module currently supports a single export format: [DOT](https://graphviz.org/doc/info/lang.html), the graph description language used by Graphviz for visualizing structured data. If needed, you can easily add your own export format by implementing the [Exporter](https://pkg.go.dev/github.com/hovsep/fmesh-graphviz#Exporter) interface:
-```go
-// Exporter is the common interface for all formats
-type Exporter interface {
-	// Export returns the F-Mesh structure in some format
-	Export(fm *fmesh.FMesh) ([]byte, error)
+This module provides high-quality DOT graph export for FMesh structures using the [DOT language](https://graphviz.org/doc/info/lang.html) - the graph description language used by Graphviz for visualizing structured data.
 
-	// ExportWithCycles returns the F-Mesh state for each activation cycle
-	ExportWithCycles(fm *fmesh.FMesh, activationCycles cycle.Cycles) ([][]byte, error)
-}
-```
+## ✨ Features
 
-This interface is straightforward: you receive the mesh and return its representation. The **Export** method represents the static structure of the mesh, while **ExportWithCycles** provides a dynamic view, showing the state of the mesh at each activation cycle—useful for debugging and visualizing the execution process.
+- **Static mesh visualization** - Export the structure of your FMesh
+- **Cycle-by-cycle animation** - Export each activation cycle for dynamic visualization  
+- **Complete statistics** - Always shows all activation states even with zero counts
+- **Clear state labels** - Readable activation state names for easy understanding
+- **Highly customizable** - Full control over colors, styles, and layout via configuration
+- **Professional output** - Ready for documentation, presentations, and debugging
 
-Check out the [dot](https://pkg.go.dev/github.com/hovsep/fmesh-graphviz/dot) package documentation for more details.
+The exporter implements the [Exporter interface](https://pkg.go.dev/github.com/hovsep/fmesh/export) from the main FMesh library, making it easy to swap between different export formats.
+
+Check out the [dot](https://pkg.go.dev/github.com/hovsep/fmesh-graphviz/dot) package documentation for detailed API reference.
 
 
 ## Using an Exporter
@@ -64,24 +63,68 @@ Graphviz supports various output formats such as PNG, SVG, and PDF. See the full
 To export a mesh along with its activation cycles, pass the cycle data to the exporter and save each cycle separately:
 ```go
 runResult, err := fm.Run()
+if err != nil {
+    panic("failed to run mesh")
+}
+
 exporter := dot.NewDotExporter()
 data, err := exporter.ExportWithCycles(fm, runResult.Cycles.CyclesOrNil())
 if err != nil {
-	panic("failed to export mesh")
+    panic("failed to export mesh")
 }
 
 for cycleNumber, cycleGraph := range data {
-   os.WriteFile(fmt.Sprintf("cycle-%d.dot", cycleNumber),cycleGraph, 0755)
+    filename := fmt.Sprintf("cycle-%d.dot", cycleNumber)
+    os.WriteFile(filename, cycleGraph, 0644)
 }
 ```
-This code creates a separate .dot file for each cycle (e.g., cycle-0.dot, cycle-1.dot). You can use these files to create an animation of your program's execution, such as a GIF:
+
+This creates separate `.dot` files for each cycle (e.g., `cycle-0.dot`, `cycle-1.dot`). Each cycle includes a **comprehensive statistics legend** showing:
+
+- **Activated**: Total components that executed in this cycle
+- **All activation states**: Counts for each component state (OK, NoInput, NoFunction, ReturnedError, Panicked, WaitingForInputsClear, WaitingForInputsKeep)
+
+### Creating Animations
+
+You can use these files to create animations of your program's execution:
 
 ![](https://github.com/user-attachments/assets/3ac501e7-b62f-4fd6-9908-be399a6ca464)
 
->[!NOTE]
->* On Cycle-3, the layout changes because the **sum** component is waiting for inputs.
->* In the final cycle, no components are executed, and the mesh finishes naturally.
+```bash
+# Generate PNG files for each cycle
+for file in cycle-*.dot; do
+    dot -Tpng "$file" -o "${file%.dot}.png"
+done
 
+# Create animated GIF (requires ImageMagick)
+convert -delay 100 -loop 0 cycle-*.png mesh-animation.gif
+```
+
+>[!NOTE]
+>* Component colors change based on their activation state (green=success, yellow=no input, red=error, etc.)
+>* The legend provides real-time statistics for each cycle
+>* Layout may change when components enter waiting states
 
 <img src="https://github.com/user-attachments/assets/3d315e9b-e920-46b8-b626-3061c259e9eb" width="400"/>
+
+## Configuration
+
+Customize the visual appearance using `NewDotExporterWithConfig`:
+
+```go
+config := &dot.Config{
+    MainGraph: map[string]string{
+        "layout": "neato",  // Try different layouts: dot, neato, fdp, circo
+        "splines": "curved",
+    },
+    Component: dot.ComponentConfig{
+        Node: map[string]string{
+            "shape": "ellipse",
+            "color": "#ffcc00",
+        },
+    },
+}
+
+exporter := dot.NewDotExporterWithConfig(config)
+```
 
