@@ -296,10 +296,40 @@ func (d *Exporter) addLegend(graph *dot.Graph, fm *fmesh.FMesh, activationCycle 
 
 // getCycleStats returns basic cycle stats.
 func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
+	// Initialize all possible activation states with zero values
+	// This ensures all counters are always shown, even when zero
 	statsMap := map[string]*statEntry{
-		// Number of activated must be shown always
 		"activated": {
 			Name:  "Activated",
+			Value: 0,
+		},
+		// All possible activation result codes
+		fmeshcomponent.ActivationCodeOK.String(): {
+			Name:  fmeshcomponent.ActivationCodeOK.String(),
+			Value: 0,
+		},
+		fmeshcomponent.ActivationCodeNoInput.String(): {
+			Name:  fmeshcomponent.ActivationCodeNoInput.String(),
+			Value: 0,
+		},
+		fmeshcomponent.ActivationCodeNoFunction.String(): {
+			Name:  fmeshcomponent.ActivationCodeNoFunction.String(),
+			Value: 0,
+		},
+		fmeshcomponent.ActivationCodeReturnedError.String(): {
+			Name:  fmeshcomponent.ActivationCodeReturnedError.String(),
+			Value: 0,
+		},
+		fmeshcomponent.ActivationCodePanicked.String(): {
+			Name:  fmeshcomponent.ActivationCodePanicked.String(),
+			Value: 0,
+		},
+		fmeshcomponent.ActivationCodeWaitingForInputsClear.String(): {
+			Name:  fmeshcomponent.ActivationCodeWaitingForInputsClear.String(),
+			Value: 0,
+		},
+		fmeshcomponent.ActivationCodeWaitingForInputsKeep.String(): {
+			Name:  fmeshcomponent.ActivationCodeWaitingForInputsKeep.String(),
 			Value: 0,
 		},
 	}
@@ -308,13 +338,10 @@ func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
 			statsMap["activated"].Value++
 		}
 
+		// Increment the counter for this activation result code
+		// All possible codes are pre-initialized above
 		if entryByCode, ok := statsMap[ar.Code().String()]; ok {
 			entryByCode.Value++
-		} else {
-			statsMap[ar.Code().String()] = &statEntry{
-				Name:  ar.Code().String(),
-				Value: 1,
-			}
 		}
 	}
 	// Convert to slice to preserve keys order
