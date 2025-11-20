@@ -68,7 +68,7 @@ if err != nil {
 }
 
 exporter := dot.NewDotExporter()
-data, err := exporter.ExportWithCycles(fm, runResult.Cycles.CyclesOrNil())
+data, err := exporter.ExportWithCycles(fm, runResult.Cycles)
 if err != nil {
     panic("failed to export mesh")
 }
