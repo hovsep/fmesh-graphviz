@@ -1,12 +1,13 @@
 package dot
 
 import (
+	"testing"
+
 	"github.com/hovsep/fmesh"
 	"github.com/hovsep/fmesh/component"
 	"github.com/hovsep/fmesh/signal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func Test_dotExporter_Export(t *testing.T) {
@@ -34,8 +35,8 @@ func Test_dotExporter_Export(t *testing.T) {
 				fm: func() *fmesh.FMesh {
 					adder := component.New("adder").
 						WithDescription("This component adds 2 numbers").
-						WithInputs("num1", "num2").
-						WithOutputs("result").
+						AddInputs("num1", "num2").
+						AddOutputs("result").
 						WithActivationFunc(func(this *component.Component) error {
 							// The activation func can be even empty, does not affect export
 							return nil
@@ -43,8 +44,8 @@ func Test_dotExporter_Export(t *testing.T) {
 
 					multiplier := component.New("multiplier").
 						WithDescription("This component multiplies number by 3").
-						WithInputs("num").
-						WithOutputs("result").
+						AddInputs("num").
+						AddOutputs("result").
 						WithActivationFunc(func(this *component.Component) error {
 							// The activation func can be even empty, does not affect export
 							return nil
@@ -53,8 +54,8 @@ func Test_dotExporter_Export(t *testing.T) {
 					adder.OutputByName("result").PipeTo(multiplier.InputByName("num"))
 
 					fm := fmesh.New("fm").
-						WithDescription("This f-mesh has just one component").
-						WithComponents(adder, multiplier)
+						WithDescription("mesh of 2 components").
+						AddComponents(adder, multiplier)
 					return fm
 				}(),
 			},
@@ -91,15 +92,15 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 				fm: func() *fmesh.FMesh {
 					adder := component.New("adder").
 						WithDescription("This component adds 2 numbers").
-						WithInputs("num1", "num2").
-						WithOutputs("result").
+						AddInputs("num1", "num2").
+						AddOutputs("result").
 						WithActivationFunc(func(this *component.Component) error {
-							num1, err := this.InputByName("num1").FirstSignalPayload()
+							num1, err := this.InputByName("num1").Signals().FirstPayload()
 							if err != nil {
 								return err
 							}
 
-							num2, err := this.InputByName("num2").FirstSignalPayload()
+							num2, err := this.InputByName("num2").Signals().FirstPayload()
 							if err != nil {
 								return err
 							}
@@ -110,10 +111,10 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 
 					multiplier := component.New("multiplier").
 						WithDescription("This component multiplies number by 3").
-						WithInputs("num").
-						WithOutputs("result").
+						AddInputs("num").
+						AddOutputs("result").
 						WithActivationFunc(func(this *component.Component) error {
-							num, err := this.InputByName("num").FirstSignalPayload()
+							num, err := this.InputByName("num").Signals().FirstPayload()
 							if err != nil {
 								return err
 							}
@@ -125,7 +126,7 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 
 					fm := fmesh.New("fm").
 						WithDescription("This f-mesh has just one component").
-						WithComponents(adder, multiplier)
+						AddComponents(adder, multiplier)
 
 					adder.InputByName("num1").PutSignals(signal.New(15))
 					adder.InputByName("num2").PutSignals(signal.New(12))
@@ -146,7 +147,7 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 
 			exporter := NewDotExporter()
 
-			got, err := exporter.ExportWithCycles(tt.args.fm, runResult.Cycles.CyclesOrNil())
+			got, err := exporter.ExportWithCycles(tt.args.fm, runResult.Cycles)
 			if tt.assertions != nil {
 				tt.assertions(t, got, err)
 			}
