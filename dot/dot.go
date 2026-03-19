@@ -58,28 +58,29 @@ func (d *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
 }
 
 // ExportWithCycles returns multiple graphs showing the state of the given f-mesh in each activation cycle.
-func (d *Exporter) ExportWithCycles(fm *fmesh.FMesh, activationCycles cycle.Cycles) ([][]byte, error) {
+func (d *Exporter) ExportWithCycles(fm *fmesh.FMesh, activationCycles *cycle.Group) ([][]byte, error) {
 	if fm.Components().Len() == 0 {
 		return nil, nil
 	}
 
-	if len(activationCycles) == 0 {
+	if activationCycles.IsEmpty() {
 		return nil, nil
 	}
 
-	results := make([][]byte, len(activationCycles))
+	results := make([][]byte, activationCycles.Len())
 
-	for _, activationCycle := range activationCycles {
-		graphForCycle, err := d.buildGraph(fm, activationCycle)
+	activationCycles.ForEach(func(ac *cycle.Cycle) error {
+		graphForCycle, err := d.buildGraph(fm, ac)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		buf := new(bytes.Buffer)
 		graphForCycle.Write(buf)
 
-		results[activationCycle.Number()-1] = buf.Bytes()
-	}
+		results[ac.Number()-1] = buf.Bytes()
+		return nil
+	})
 
 	return results, nil
 }
@@ -92,7 +93,7 @@ func (d *Exporter) buildGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) (*d
 		return nil, fmt.Errorf("failed to get main graph: %w", err)
 	}
 
-	components, err := fm.Components().Components()
+	components, err := fm.Components().All()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get components: %w", err)
 	}
@@ -126,20 +127,20 @@ func (d *Exporter) getMainGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) (
 // addPipes adds pipes representation to the graph.
 func (d *Exporter) addPipes(graph *dot.Graph, components fmeshcomponent.Map) error {
 	for _, c := range components {
-		srcPorts, err := c.Outputs().Ports()
+		srcPorts, err := c.Outputs().All()
 		if err != nil {
 			return err
 		}
 
 		for _, srcPort := range srcPorts {
-			destPorts, err := srcPort.Pipes().Ports()
+			destPorts, err := srcPort.Pipes().All()
 			if err != nil {
 				return err
 			}
 			for _, destPort := range destPorts {
 				// Any destination port in any pipe is input port, but we do not know in which component
 				// so we use the label we added earlier
-				destPortID, err := destPort.Label(nodeIDLabel)
+				destPortID, err := destPort.Labels().Value(nodeIDLabel)
 				if err != nil {
 					return fmt.Errorf("failed to add pipe to port: %s : %w", destPort.Name(), err)
 				}
@@ -171,13 +172,13 @@ func (d *Exporter) addComponents(graph *dot.Graph, components fmeshcomponent.Map
 		// Component
 		var activationResult *fmeshcomponent.ActivationResult
 		if activationCycle != nil {
-			activationResult = activationCycle.ActivationResults().ByComponentName(c.Name())
+			activationResult = activationCycle.ActivationResults().ByName(c.Name())
 		}
 		componentSubgraph := d.getComponentSubgraph(graph, c, activationResult)
 		componentNode := d.getComponentNode(componentSubgraph, c, activationResult)
 
 		// Input ports
-		inputPorts, err := c.Inputs().Ports()
+		inputPorts, err := c.Inputs().All()
 		if err != nil {
 			return err
 		}
@@ -187,7 +188,7 @@ func (d *Exporter) addComponents(graph *dot.Graph, components fmeshcomponent.Map
 		}
 
 		// Output ports
-		outputPorts, err := c.Outputs().Ports()
+		outputPorts, err := c.Outputs().All()
 		if err != nil {
 			return err
 		}
@@ -201,7 +202,7 @@ func (d *Exporter) addComponents(graph *dot.Graph, components fmeshcomponent.Map
 
 // getPortNode creates and returns a node representing one port.
 func (d *Exporter) getPortNode(c *fmeshcomponent.Component, p *port.Port, componentSubgraph *dot.Graph) *dot.Node {
-	portID := getPortID(c.Name(), p.LabelOrDefault(port.DirectionLabel, ""), p.Name())
+	portID := getPortID(c.Name(), p.Direction(), p.Name())
 
 	// Mark ports to be able to find their respective nodes later when adding pipes
 	p.AddLabel(nodeIDLabel, portID)
@@ -333,7 +334,8 @@ func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
 			Value: 0,
 		},
 	}
-	for _, ar := range activationCycle.ActivationResults().All() {
+
+	activationCycle.ActivationResults().ForEach(func(ar *fmeshcomponent.ActivationResult) error {
 		if ar.Activated() {
 			statsMap["activated"].Value++
 		}
@@ -343,7 +345,9 @@ func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
 		if entryByCode, ok := statsMap[ar.Code().String()]; ok {
 			entryByCode.Value++
 		}
-	}
+		return nil
+	})
+
 	// Convert to slice to preserve keys order
 	statsList := make([]*statEntry, 0)
 	for _, entry := range statsMap {
@@ -357,13 +361,24 @@ func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
 }
 
 // getPortID returns unique ID used to locate ports while building pipe edges.
-func getPortID(componentName, portDirection, portName string) string {
-	return fmt.Sprintf("component/%s/%s/%s", componentName, portDirection, portName)
+func getPortID(componentName string, portDirection port.Direction, portName string) string {
+	return fmt.Sprintf("component/%s/%s/%s", componentName, portDirectionToString(portDirection), portName)
 }
 
 // setAttrMap sets all attributes to target.
 func setAttrMap(target *dot.AttributesMap, attributes attributesMap) {
 	for attrName, attrValue := range attributes {
 		target.Attr(attrName, attrValue)
+	}
+}
+
+func portDirectionToString(portDirection port.Direction) string {
+	switch portDirection {
+	case port.DirectionIn:
+		return "in"
+	case port.DirectionOut:
+		return "out"
+	default:
+		return "unknown"
 	}
 }
