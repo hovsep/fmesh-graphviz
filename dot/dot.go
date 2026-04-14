@@ -313,10 +313,6 @@ func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
 			Name:  fmeshcomponent.ActivationCodeNoInput.String(),
 			Value: 0,
 		},
-		fmeshcomponent.ActivationCodeNoFunction.String(): {
-			Name:  fmeshcomponent.ActivationCodeNoFunction.String(),
-			Value: 0,
-		},
 		fmeshcomponent.ActivationCodeReturnedError.String(): {
 			Name:  fmeshcomponent.ActivationCodeReturnedError.String(),
 			Value: 0,

@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/emicklei/dot v1.9.2
-	github.com/hovsep/fmesh v1.8.1-Tarsus
+	github.com/hovsep/fmesh v1.8.3-Tarsus
 	github.com/stretchr/testify v1.11.1
 )
 
