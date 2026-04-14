@@ -73,9 +73,6 @@ var (
 				fmeshcomponent.ActivationCodeNoInput: {
 					"color": "yellow",
 				},
-				fmeshcomponent.ActivationCodeNoFunction: {
-					"color": "gray",
-				},
 				fmeshcomponent.ActivationCodeReturnedError: {
 					"color": "red",
 				},
