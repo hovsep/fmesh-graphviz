@@ -10,6 +10,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func mustNewFMesh(t *testing.T, name string, opts ...fmesh.Option) *fmesh.FMesh {
+	t.Helper()
+	fm, err := fmesh.New(name, opts...)
+	require.NoError(t, err)
+	return fm
+}
+
+func mustNewComponent(t *testing.T, name string, opts ...component.Option) *component.Component {
+	t.Helper()
+	c, err := component.New(name, opts...)
+	require.NoError(t, err)
+	return c
+}
+
 func Test_dotExporter_Export(t *testing.T) {
 	type args struct {
 		fm *fmesh.FMesh
@@ -22,7 +36,7 @@ func Test_dotExporter_Export(t *testing.T) {
 		{
 			name: "empty f-mesh",
 			args: args{
-				fm: fmesh.New("fm"),
+				fm: mustNewFMesh(t, "fm"),
 			},
 			assertions: func(t *testing.T, data []byte, err error) {
 				require.NoError(t, err)
@@ -33,29 +47,28 @@ func Test_dotExporter_Export(t *testing.T) {
 			name: "happy path",
 			args: args{
 				fm: func() *fmesh.FMesh {
-					adder := component.New("adder").
-						WithDescription("This component adds 2 numbers").
-						AddInputs("num1", "num2").
-						AddOutputs("result").
-						WithActivationFunc(func(this *component.Component) error {
-							// The activation func can be even empty, does not affect export
+					adder := mustNewComponent(t, "adder",
+						component.WithDescription("This component adds 2 numbers"),
+						component.WithInputs("num1", "num2"),
+						component.WithOutputs("result"),
+						component.WithActivationFunc(func(this *component.Component) error {
 							return nil
-						})
+						}),
+					)
 
-					multiplier := component.New("multiplier").
-						WithDescription("This component multiplies number by 3").
-						AddInputs("num").
-						AddOutputs("result").
-						WithActivationFunc(func(this *component.Component) error {
-							// The activation func can be even empty, does not affect export
+					multiplier := mustNewComponent(t, "multiplier",
+						component.WithDescription("This component multiplies number by 3"),
+						component.WithInputs("num"),
+						component.WithOutputs("result"),
+						component.WithActivationFunc(func(this *component.Component) error {
 							return nil
-						})
+						}),
+					)
 
-					adder.OutputByName("result").PipeTo(multiplier.InputByName("num"))
+					require.NoError(t, adder.OutputByName("result").PipeTo(multiplier.InputByName("num")))
 
-					fm := fmesh.New("fm").
-						WithDescription("This f-mesh has just one component").
-						AddComponents(adder, multiplier)
+					fm := mustNewFMesh(t, "fm", fmesh.WithDescription("This f-mesh has just one component"))
+					require.NoError(t, fm.AddComponents(adder, multiplier))
 					return fm
 				}(),
 			},
@@ -90,11 +103,11 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 			name: "happy path",
 			args: args{
 				fm: func() *fmesh.FMesh {
-					adder := component.New("adder").
-						WithDescription("This component adds 2 numbers").
-						AddInputs("num1", "num2").
-						AddOutputs("result").
-						WithActivationFunc(func(this *component.Component) error {
+					adder := mustNewComponent(t, "adder",
+						component.WithDescription("This component adds 2 numbers"),
+						component.WithInputs("num1", "num2"),
+						component.WithOutputs("result"),
+						component.WithActivationFunc(func(this *component.Component) error {
 							num1, err := this.InputByName("num1").Signals().FirstPayload()
 							if err != nil {
 								return err
@@ -105,31 +118,30 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 								return err
 							}
 
-							this.OutputByName("result").PutSignals(signal.New(num1.(int) + num2.(int)))
-							return nil
-						})
+							return this.OutputByName("result").PutSignals(signal.New(num1.(int) + num2.(int)))
+						}),
+					)
 
-					multiplier := component.New("multiplier").
-						WithDescription("This component multiplies number by 3").
-						AddInputs("num").
-						AddOutputs("result").
-						WithActivationFunc(func(this *component.Component) error {
+					multiplier := mustNewComponent(t, "multiplier",
+						component.WithDescription("This component multiplies number by 3"),
+						component.WithInputs("num"),
+						component.WithOutputs("result"),
+						component.WithActivationFunc(func(this *component.Component) error {
 							num, err := this.InputByName("num").Signals().FirstPayload()
 							if err != nil {
 								return err
 							}
-							this.OutputByName("result").PutSignals(signal.New(num.(int) * 3))
-							return nil
-						})
+							return this.OutputByName("result").PutSignals(signal.New(num.(int) * 3))
+						}),
+					)
 
-					adder.OutputByName("result").PipeTo(multiplier.InputByName("num"))
+					require.NoError(t, adder.OutputByName("result").PipeTo(multiplier.InputByName("num")))
 
-					fm := fmesh.New("fm").
-						WithDescription("This f-mesh has just one component").
-						AddComponents(adder, multiplier)
+					fm := mustNewFMesh(t, "fm", fmesh.WithDescription("This f-mesh has just one component"))
+					require.NoError(t, fm.AddComponents(adder, multiplier))
 
-					adder.InputByName("num1").PutSignals(signal.New(15))
-					adder.InputByName("num2").PutSignals(signal.New(12))
+					require.NoError(t, adder.InputByName("num1").PutSignals(signal.New(15)))
+					require.NoError(t, adder.InputByName("num2").PutSignals(signal.New(12)))
 
 					return fm
 				}(),
