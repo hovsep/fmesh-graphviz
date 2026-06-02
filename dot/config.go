@@ -4,6 +4,13 @@ import fmeshcomponent "github.com/hovsep/fmesh/component"
 
 type attributesMap map[string]string
 
+const (
+	attrColor    = "color"
+	attrPenwidth = "penwidth"
+	attrShape    = "shape"
+	attrStyle    = "style"
+)
+
 // ComponentConfig defines the configuration for the component visualization.
 type ComponentConfig struct {
 	Subgraph                                 attributesMap
@@ -47,66 +54,66 @@ var (
 		},
 		Component: ComponentConfig{
 			Subgraph: attributesMap{
-				"style":    "rounded",
-				"color":    "black",
-				"margin":   "20",
-				"penwidth": "5",
+				attrStyle:    "rounded",
+				attrColor:    "black",
+				"margin":     "20",
+				attrPenwidth: "5",
 			},
 			SubgraphNodeBaseAttrs: attributesMap{
-				"fontname": "Courier New",
-				"width":    "1.0",
-				"height":   "1.0",
-				"penwidth": "2.5",
-				"style":    "filled",
+				"fontname":   "Courier New",
+				"width":      "1.0",
+				"height":     "1.0",
+				attrPenwidth: "2.5",
+				attrStyle:    "filled",
 			},
 			Node: attributesMap{
-				"shape": "rect",
-				"color": "#9dddea",
-				"style": "filled",
+				attrShape: "rect",
+				attrColor: "#9dddea",
+				attrStyle: "filled",
 			},
 			NodeDefaultLabel: "𝑓",
 			ErrorNode:        nil,
 			SubgraphAttributesByActivationResultCode: map[fmeshcomponent.ActivationResultCode]attributesMap{
 				fmeshcomponent.ActivationCodeOK: {
-					"color": "green",
+					attrColor: "green",
 				},
 				fmeshcomponent.ActivationCodeNoInput: {
-					"color": "yellow",
+					attrColor: "yellow",
 				},
 				fmeshcomponent.ActivationCodeReturnedError: {
-					"color": "red",
+					attrColor: "red",
 				},
 				fmeshcomponent.ActivationCodePanicked: {
-					"color": "pink",
+					attrColor: "pink",
 				},
 				fmeshcomponent.ActivationCodeWaitingForInputsClear: {
-					"color": "blue",
+					attrColor: "blue",
 				},
 				fmeshcomponent.ActivationCodeWaitingForInputsKeep: {
-					"color": "purple",
+					attrColor: "purple",
 				},
 			},
 		},
 		Port: PortConfig{
 			Node: attributesMap{
-				"shape": "circle",
+				attrShape: "circle",
 			},
 		},
 		Pipe: PipeConfig{
 			Edge: attributesMap{
-				"minlen":   "3",
-				"penwidth": "2",
-				"color":    "#e437ea",
+				"minlen":     "3",
+				attrPenwidth: "2",
+				attrColor:    "#e437ea",
 			},
 		},
 		Legend: LegendConfig{
 			Subgraph: attributesMap{
-				"style":     "dashed,filled",
+				attrStyle:   "dashed,filled",
 				"fillcolor": "#e2c6fc",
 			},
 			Node: attributesMap{
-				"shape":    "plaintext",
-				"color":    "green",
+				attrShape:  "plaintext",
+				attrColor:  "green",
 				"fontname": "Courier New",
 			},
 		},
