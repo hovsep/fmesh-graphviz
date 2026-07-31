@@ -1,6 +1,7 @@
 package dot
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hovsep/fmesh"
@@ -51,7 +52,7 @@ func Test_dotExporter_Export(t *testing.T) {
 						component.WithDescription("This component adds 2 numbers"),
 						component.WithInputs("num1", "num2"),
 						component.WithOutputs("result"),
-						component.WithActivationFunc(func(this *component.Component) error {
+						component.WithActivationFunc(func(_ context.Context, this *component.Component) error {
 							return nil
 						}),
 					)
@@ -60,7 +61,7 @@ func Test_dotExporter_Export(t *testing.T) {
 						component.WithDescription("This component multiplies number by 3"),
 						component.WithInputs("num"),
 						component.WithOutputs("result"),
-						component.WithActivationFunc(func(this *component.Component) error {
+						component.WithActivationFunc(func(_ context.Context, this *component.Component) error {
 							return nil
 						}),
 					)
@@ -107,7 +108,7 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 						component.WithDescription("This component adds 2 numbers"),
 						component.WithInputs("num1", "num2"),
 						component.WithOutputs("result"),
-						component.WithActivationFunc(func(this *component.Component) error {
+						component.WithActivationFunc(func(_ context.Context, this *component.Component) error {
 							num1, err := this.InputByName("num1").Signals().FirstPayload()
 							if err != nil {
 								return err
@@ -126,7 +127,7 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 						component.WithDescription("This component multiplies number by 3"),
 						component.WithInputs("num"),
 						component.WithOutputs("result"),
-						component.WithActivationFunc(func(this *component.Component) error {
+						component.WithActivationFunc(func(_ context.Context, this *component.Component) error {
 							num, err := this.InputByName("num").Signals().FirstPayload()
 							if err != nil {
 								return err
@@ -154,7 +155,7 @@ func Test_dotExporter_ExportWithCycles(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runResult, err := tt.args.fm.Run()
+			runResult, err := tt.args.fm.Run(t.Context())
 			require.NoError(t, err)
 
 			exporter := NewDotExporter()
