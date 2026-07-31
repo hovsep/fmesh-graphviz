@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/emicklei/dot v1.9.2
-	github.com/hovsep/fmesh v1.9.2-Sis
+	github.com/hovsep/fmesh v1.12.1
 	github.com/stretchr/testify v1.11.1
 )
 

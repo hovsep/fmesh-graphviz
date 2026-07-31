@@ -186,7 +186,7 @@ func (d *Exporter) getPortNode(c *fmeshcomponent.Component, p *port.Port, compon
 	portID := getPortID(c.Name(), p.Direction(), p.Name())
 
 	// Mark ports to be able to find their respective nodes later when adding pipes
-	p.AddLabel(nodeIDLabel, portID)
+	p.Labels().Set(nodeIDLabel, portID)
 
 	portNode := componentSubgraph.Node(portID).Label(p.Name()).Attr("group", c.Name())
 	setAttrMap(&portNode.AttributesMap, d.config.Port.Node)
