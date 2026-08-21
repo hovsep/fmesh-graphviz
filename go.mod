@@ -1,6 +1,6 @@
 module github.com/hovsep/fmesh-graphviz
 
-go 1.26
+go 1.27
 
 require (
 	github.com/emicklei/dot v1.9.2
