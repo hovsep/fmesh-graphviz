@@ -1,10 +1,13 @@
+// Package dot provides [Plugin], a mesh plugin that exports an fmesh mesh as a
+// Graphviz DOT graph: the static structure, and optionally one graph per cycle.
 package dot
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"html/template"
-	"sort"
 
 	"github.com/emicklei/dot"
 	"github.com/hovsep/fmesh"
@@ -13,349 +16,305 @@ import (
 	"github.com/hovsep/fmesh/port"
 )
 
+var (
+	// ErrNotAttached is returned by an export before the plugin is attached to a mesh.
+	ErrNotAttached = errors.New("dot: plugin is not attached to a mesh")
+
+	// ErrCyclesNotRecorded is returned by ExportCycles when the plugin was created without WithCycles.
+	ErrCyclesNotRecorded = errors.New("dot: cycles are not recorded, create the plugin with WithCycles")
+)
+
+// Plugin exports the mesh it is attached to as a Graphviz DOT graph. One
+// instance serves one mesh.
+type Plugin struct {
+	style        *style
+	recordCycles bool
+	fm           *fmesh.FMesh
+	cycles       []*cycle.Cycle
+}
+
+// Option configures a Plugin.
+type Option func(*Plugin)
+
+// WithAttrs sets Graphviz attributes on one element of the drawing, over the
+// defaults: attributes it does not name keep their default values.
+func WithAttrs(element Element, attrs map[string]string) Option {
+	return func(p *Plugin) { merge(p.style.attrs, element, attrs) }
+}
+
+// WithResultAttrs sets attributes on a component's cluster in a cycle graph when
+// its activation ended with code, over the defaults (the colors).
+func WithResultAttrs(code fmeshcomponent.ActivationResultCode, attrs map[string]string) Option {
+	return func(p *Plugin) { merge(p.style.resultAttrs, code, attrs) }
+}
+
+// WithComponentLabel sets the label of a component node whose component has no
+// description (default "𝑓").
+func WithComponentLabel(label string) Option {
+	return func(p *Plugin) { p.style.componentLabel = label }
+}
+
+// WithCycles records every cycle of the latest run, for ExportCycles.
+func WithCycles() Option {
+	return func(p *Plugin) { p.recordCycles = true }
+}
+
+// New returns a plugin to attach with fmesh.WithPlugins.
+func New(opts ...Option) *Plugin {
+	p := &Plugin{style: defaultStyle()}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
+}
+
+// Name returns the plugin name.
+func (p *Plugin) Name() string { return "dot" }
+
+// Init attaches the plugin to the mesh and, with WithCycles, starts recording.
+func (p *Plugin) Init(fm *fmesh.FMesh) error {
+	if p.fm != nil && p.fm != fm {
+		return errors.New("dot: plugin is already attached to another mesh")
+	}
+	p.fm = fm
+
+	if p.recordCycles {
+		fm.SetupHooks(func(h *fmesh.Hooks) {
+			h.BeforeRun(func(context.Context, *fmesh.FMesh) error {
+				p.cycles = nil
+				return nil
+			})
+			// Recorded here rather than read from RuntimeInfo, so a cycles history
+			// limit does not cut the replay short.
+			h.AfterCycle(func(_ context.Context, cc *fmesh.CycleContext) error {
+				p.cycles = append(p.cycles, cc.Cycle)
+				return nil
+			})
+		})
+	}
+	return nil
+}
+
+// Export returns fm's structure as a DOT graph, for a mesh built without the
+// plugin. opts style it as they would the plugin; WithCycles has no effect.
+func Export(fm *fmesh.FMesh, opts ...Option) ([]byte, error) {
+	p := New(opts...)
+	p.fm = fm
+	return p.Export()
+}
+
+// Export returns the mesh structure as a DOT graph. An empty mesh exports nothing.
+func (p *Plugin) Export() ([]byte, error) {
+	if p.fm == nil {
+		return nil, ErrNotAttached
+	}
+	if p.fm.Components().IsEmpty() {
+		return nil, nil
+	}
+	return p.render(nil)
+}
+
+// ExportCycles returns one DOT graph per cycle of the latest run, in order.
+// Each graph colors components by their activation result and shows the cycle
+// stats in the legend.
+func (p *Plugin) ExportCycles() ([][]byte, error) {
+	if p.fm == nil {
+		return nil, ErrNotAttached
+	}
+	if !p.recordCycles {
+		return nil, ErrCyclesNotRecorded
+	}
+	if p.fm.Components().IsEmpty() {
+		return nil, nil
+	}
+
+	graphs := make([][]byte, 0, len(p.cycles))
+	for _, c := range p.cycles {
+		graph, err := p.render(c)
+		if err != nil {
+			return nil, fmt.Errorf("cycle %d: %w", c.Number(), err)
+		}
+		graphs = append(graphs, graph)
+	}
+	return graphs, nil
+}
+
+// render draws the mesh, optionally in the state of one cycle.
+func (p *Plugin) render(activationCycle *cycle.Cycle) ([]byte, error) {
+	b := &graphBuilder{style: p.style, cycle: activationCycle, ports: make(map[*port.Port]dot.Node)}
+	if err := p.fm.Walk(b); err != nil {
+		return nil, err
+	}
+	buf := new(bytes.Buffer)
+	b.graph.Write(buf)
+	return buf.Bytes(), nil
+}
+
+// graphBuilder draws a mesh from a walk. It keeps its own port-to-node map, so
+// the mesh itself is never touched.
+type graphBuilder struct {
+	style *style
+	cycle *cycle.Cycle
+
+	graph         *dot.Graph
+	subgraph      *dot.Graph // of the component visited last
+	componentNode dot.Node   // of the component visited last
+	ports         map[*port.Port]dot.Node
+}
+
+func (b *graphBuilder) VisitMesh(fm *fmesh.FMesh) error {
+	b.graph = dot.NewGraph(dot.Directed)
+	setAttrMap(&b.graph.AttributesMap, b.style.attrs[Graph])
+	return b.addLegend(fm)
+}
+
+func (b *graphBuilder) VisitComponent(c *fmeshcomponent.Component) error {
+	var result *fmeshcomponent.ActivationResult
+	if b.cycle != nil {
+		result = b.cycle.ActivationResults().ByName(c.Name())
+	}
+
+	b.subgraph = b.graph.Subgraph("id-subgraph-"+c.Name(), dot.ClusterOption{})
+	b.subgraph.NodeInitializer(func(n dot.Node) {
+		setAttrMap(&n.AttributesMap, b.style.attrs[ComponentNodes])
+	})
+	setAttrMap(&b.subgraph.AttributesMap, b.style.attrs[Component])
+	if b.cycle != nil {
+		setAttrMap(&b.subgraph.AttributesMap, b.style.resultAttrs[codeOf(result)])
+	}
+	b.subgraph.Label(c.Name())
+
+	label := b.style.componentLabel
+	if c.Description() != "" {
+		label = c.Description()
+	}
+	b.componentNode = b.subgraph.Node("id-" + c.Name())
+	setAttrMap(&b.componentNode.AttributesMap, b.style.attrs[ComponentNode])
+	b.componentNode.Label(label).Attr("group", c.Name())
+
+	if result != nil && result.ActivationError() != nil {
+		errorNode := b.subgraph.Node("id-error-" + c.Name())
+		setAttrMap(&errorNode.AttributesMap, b.style.attrs[ErrorNode])
+		errorNode.Label(result.ActivationError().Error())
+		b.subgraph.Edge(b.componentNode, errorNode)
+	}
+	return nil
+}
+
+func (b *graphBuilder) VisitPort(c *fmeshcomponent.Component, p *port.Port) error {
+	node := b.subgraph.Node(portID(c.Name(), p)).Label(p.Name()).Attr("group", c.Name())
+	setAttrMap(&node.AttributesMap, b.style.attrs[Port])
+	b.ports[p] = node
+
+	if p.IsInput() {
+		b.subgraph.Edge(node, b.componentNode)
+	} else {
+		b.subgraph.Edge(b.componentNode, node)
+	}
+	return nil
+}
+
+func (b *graphBuilder) VisitPipe(from, to *port.Port) error {
+	fromNode, ok := b.ports[from]
+	if !ok {
+		return fmt.Errorf("pipe source port %q is not in the mesh", from.Name())
+	}
+	toNode, ok := b.ports[to]
+	if !ok {
+		return fmt.Errorf("pipe destination port %q is not in the mesh", to.Name())
+	}
+	edge := b.graph.Edge(fromNode, toNode)
+	setAttrMap(&edge.AttributesMap, b.style.attrs[Pipe])
+	return nil
+}
+
+// addLegend adds the mesh description and, for a cycle, its number and stats.
+func (b *graphBuilder) addLegend(fm *fmesh.FMesh) error {
+	subgraph := b.graph.Subgraph("id-legend", dot.ClusterOption{})
+	setAttrMap(&subgraph.AttributesMap, b.style.attrs[Legend])
+	subgraph.Delete("label")
+
+	data := map[string]any{
+		"meshDescription": fmt.Sprintf("A mesh with %d components", fm.Components().Len()),
+	}
+	if fm.Description() != "" {
+		data["meshDescription"] = fm.Description()
+	}
+	if b.cycle != nil {
+		data["cycleNumber"] = b.cycle.Number()
+		data["stats"] = cycleStats(fm, b.cycle)
+	}
+
+	legend := new(bytes.Buffer)
+	if err := legendTemplate.Execute(legend, data); err != nil {
+		return fmt.Errorf("failed to render legend: %w", err)
+	}
+
+	node := subgraph.Node("legend-subgraph")
+	setAttrMap(&node.AttributesMap, b.style.attrs[LegendNode])
+	node.Attr("label", dot.HTML(legend.String()))
+	return nil
+}
+
 type statEntry struct {
 	Name  string
 	Value int
 }
 
-// Exporter implements the graphviz.Exporter interface.
-type Exporter struct {
-	config *Config
+// statCodes lists every activation result code, in the order the legend shows them.
+var statCodes = []fmeshcomponent.ActivationResultCode{
+	fmeshcomponent.ActivationCodeOK,
+	fmeshcomponent.ActivationCodeNoInput,
+	fmeshcomponent.ActivationCodeReturnedError,
+	fmeshcomponent.ActivationCodePanicked,
+	fmeshcomponent.ActivationCodeHookFailed,
+	fmeshcomponent.ActivationCodeWaitingForInputsClear,
+	fmeshcomponent.ActivationCodeWaitingForInputsKeep,
 }
 
-const (
-	nodeIDLabel = "export/dot/id"
-)
-
-// NewDotExporter returns exporter with default configuration.
-func NewDotExporter() *Exporter {
-	return NewDotExporterWithConfig(defaultConfig)
-}
-
-// NewDotExporterWithConfig returns exporter with custom configuration.
-func NewDotExporterWithConfig(config *Config) *Exporter {
-	return &Exporter{
-		config: config,
-	}
-}
-
-// Export returns the f-mesh as DOT-graph.
-func (d *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
-	if fm.Components().Len() == 0 {
-		return nil, nil
-	}
-
-	graph, err := d.buildGraph(fm, nil)
-
-	if err != nil {
-		return nil, err
-	}
-
-	buf := new(bytes.Buffer)
-	graph.Write(buf)
-
-	return buf.Bytes(), nil
-}
-
-// ExportWithCycles returns multiple graphs showing the state of the given f-mesh in each activation cycle.
-func (d *Exporter) ExportWithCycles(fm *fmesh.FMesh, activationCycles *cycle.Group) ([][]byte, error) {
-	if fm.Components().Len() == 0 {
-		return nil, nil
-	}
-
-	if activationCycles.IsEmpty() {
-		return nil, nil
-	}
-
-	results := make([][]byte, activationCycles.Len())
-
-	_ = activationCycles.ForEach(func(ac *cycle.Cycle) error {
-		graphForCycle, err := d.buildGraph(fm, ac)
-		if err != nil {
-			return err
-		}
-
-		buf := new(bytes.Buffer)
-		graphForCycle.Write(buf)
-
-		results[ac.Number()-1] = buf.Bytes()
-		return nil
-	})
-
-	return results, nil
-}
-
-// buildGraph returns f-mesh as a graph
-// activationCycle may be passed optionally to get a representation of f-mesh in a given activation cycle.
-func (d *Exporter) buildGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) (*dot.Graph, error) {
-	mainGraph, err := d.getMainGraph(fm, activationCycle)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get main graph: %w", err)
-	}
-
-	components := fm.Components().All()
-
-	d.addComponents(mainGraph, components, activationCycle)
-
-	err = d.addPipes(mainGraph, components)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add pipes: %w", err)
-	}
-	return mainGraph, nil
-}
-
-// getMainGraph creates and returns the main (root) graph.
-func (d *Exporter) getMainGraph(fm *fmesh.FMesh, activationCycle *cycle.Cycle) (*dot.Graph, error) {
-	graph := dot.NewGraph(dot.Directed)
-
-	setAttrMap(&graph.AttributesMap, d.config.MainGraph)
-
-	err := d.addLegend(graph, fm, activationCycle)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build main graph: %w", err)
-	}
-
-	return graph, nil
-}
-
-// addPipes adds pipes representation to the graph.
-func (d *Exporter) addPipes(graph *dot.Graph, components map[string]*fmeshcomponent.Component) error {
-	for _, c := range components {
-		srcPorts := c.Outputs().All()
-
-		for _, srcPort := range srcPorts {
-			destPorts := srcPort.Pipes().All()
-			for _, destPort := range destPorts {
-				// Any destination port in any pipe is input port, but we do not know in which component
-				// so we use the label we added earlier
-				destPortID, err := destPort.Labels().Value(nodeIDLabel)
-				if err != nil {
-					return fmt.Errorf("failed to add pipe to port: %s : %w", destPort.Name(), err)
-				}
-				// Delete label, as it is not needed anymore
-				// destPort.DeleteLabel(nodeIDLabel)
-
-				// Any source port in any pipe is always output port, so we can build its node ID
-				srcPortNode, ok := graph.FindNodeById(getPortID(c.Name(), port.DirectionOut, srcPort.Name()))
-				if !ok {
-					return fmt.Errorf("source port %s node not found in graph", srcPort.Name())
-				}
-
-				destPortNode, ok := graph.FindNodeById(destPortID)
-				if !ok {
-					return fmt.Errorf("destination port node %s not found in graph", destPortID)
-				}
-
-				e := graph.Edge(srcPortNode, destPortNode)
-				setAttrMap(&e.AttributesMap, d.config.Pipe.Edge)
-			}
-		}
-	}
-	return nil
-}
-
-// addComponents adds components representation to the graph.
-func (d *Exporter) addComponents(graph *dot.Graph, components map[string]*fmeshcomponent.Component, activationCycle *cycle.Cycle) {
-	for _, c := range components {
-		// Component
-		var activationResult *fmeshcomponent.ActivationResult
-		if activationCycle != nil {
-			activationResult = activationCycle.ActivationResults().ByName(c.Name())
-		}
-		componentSubgraph := d.getComponentSubgraph(graph, c, activationResult)
-		componentNode := d.getComponentNode(componentSubgraph, c, activationResult)
-
-		// Input ports
-		inputPorts := c.Inputs().All()
-		for _, p := range inputPorts {
-			portNode := d.getPortNode(c, p, componentSubgraph)
-			componentSubgraph.Edge(*portNode, *componentNode)
-		}
-
-		// Output ports
-		outputPorts := c.Outputs().All()
-		for _, p := range outputPorts {
-			portNode := d.getPortNode(c, p, componentSubgraph)
-			componentSubgraph.Edge(*componentNode, *portNode)
-		}
-	}
-}
-
-// getPortNode creates and returns a node representing one port.
-func (d *Exporter) getPortNode(c *fmeshcomponent.Component, p *port.Port, componentSubgraph *dot.Graph) *dot.Node {
-	portID := getPortID(c.Name(), p.Direction(), p.Name())
-
-	// Mark ports to be able to find their respective nodes later when adding pipes
-	p.Labels().Set(nodeIDLabel, portID)
-
-	portNode := componentSubgraph.Node(portID).Label(p.Name()).Attr("group", c.Name())
-	setAttrMap(&portNode.AttributesMap, d.config.Port.Node)
-
-	return &portNode
-}
-
-// getComponentSubgraph creates component subgraph and returns it.
-func (d *Exporter) getComponentSubgraph(graph *dot.Graph, component *fmeshcomponent.Component, activationResult *fmeshcomponent.ActivationResult) *dot.Graph {
-	componentSubgraph := graph.Subgraph("id-subgraph-"+component.Name(), dot.ClusterOption{})
-	componentSubgraph.NodeInitializer(func(n dot.Node) {
-		setAttrMap(&n.AttributesMap, d.config.Component.SubgraphNodeBaseAttrs)
-	})
-
-	setAttrMap(&componentSubgraph.AttributesMap, d.config.Component.Subgraph)
-
-	// Set cycle specific attributes
-	if activationResult != nil {
-		if attributesByCode, ok := d.config.Component.SubgraphAttributesByActivationResultCode[activationResult.Code()]; ok {
-			setAttrMap(&componentSubgraph.AttributesMap, attributesByCode)
+// cycleStats counts results per code. A cycle records no result for a
+// component without input, so those are counted as NoInput.
+func cycleStats(fm *fmesh.FMesh, c *cycle.Cycle) []statEntry {
+	counts := make(map[fmeshcomponent.ActivationResultCode]int, len(statCodes))
+	activated := 0
+	for _, comp := range fm.Components().AllOrdered() {
+		result := c.ActivationResults().ByName(comp.Name())
+		counts[codeOf(result)]++
+		if result != nil && result.Activated() {
+			activated++
 		}
 	}
 
-	componentSubgraph.Label(component.Name())
-
-	return componentSubgraph
+	stats := make([]statEntry, 0, 1+len(statCodes))
+	stats = append(stats, statEntry{Name: "Activated", Value: activated})
+	for _, code := range statCodes {
+		stats = append(stats, statEntry{Name: code.String(), Value: counts[code]})
+	}
+	return stats
 }
 
-// getComponentNode creates component node and returns it.
-func (d *Exporter) getComponentNode(componentSubgraph *dot.Graph, component *fmeshcomponent.Component, activationResult *fmeshcomponent.ActivationResult) *dot.Node {
-	componentNode := componentSubgraph.Node("id-" + component.Name())
-	setAttrMap(&componentNode.AttributesMap, d.config.Component.Node)
-
-	label := d.config.Component.NodeDefaultLabel
-
-	if component.Description() != "" {
-		label = component.Description()
+// codeOf treats a missing result as NoInput, which is what it means.
+func codeOf(result *fmeshcomponent.ActivationResult) fmeshcomponent.ActivationResultCode {
+	if result == nil {
+		return fmeshcomponent.ActivationCodeNoInput
 	}
-
-	if activationResult != nil {
-		if activationResult.ActivationError() != nil {
-			errorNode := componentSubgraph.Node("id-error-" + activationResult.ComponentName())
-			setAttrMap(&errorNode.AttributesMap, d.config.Component.ErrorNode)
-			errorNode.Label(activationResult.ActivationError().Error())
-			componentSubgraph.Edge(componentNode, errorNode)
-		}
-	}
-
-	componentNode.
-		Label(label).
-		Attr("group", component.Name())
-	return &componentNode
+	return result.Code()
 }
 
-// addLegend adds useful information about f-mesh and (optionally) current activation cycle.
-func (d *Exporter) addLegend(graph *dot.Graph, fm *fmesh.FMesh, activationCycle *cycle.Cycle) error {
-	subgraph := graph.Subgraph("id-legend", dot.ClusterOption{})
-
-	setAttrMap(&subgraph.AttributesMap, d.config.Legend.Subgraph)
-	subgraph.Delete("label")
-
-	legendData := make(map[string]any)
-	legendData["meshDescription"] = fmt.Sprintf("A mesh with %d components", fm.Components().Len())
-	if fm.Description() != "" {
-		legendData["meshDescription"] = fm.Description()
+// portID is a node ID unique across the graph.
+func portID(componentName string, p *port.Port) string {
+	direction := "out"
+	if p.IsInput() {
+		direction = "in"
 	}
-
-	if activationCycle != nil {
-		legendData["cycleNumber"] = activationCycle.Number()
-		legendData["stats"] = getCycleStats(activationCycle)
-	}
-
-	legendHTML := new(bytes.Buffer)
-	err := template.Must(
-		template.New("legend").
-			Parse(legendTemplate)).
-		Execute(legendHTML, legendData)
-
-	if err != nil {
-		return fmt.Errorf("failed to render legend: %w", err)
-	}
-
-	legendNode := subgraph.Node("legend-subgraph")
-	setAttrMap(&legendNode.AttributesMap, d.config.Legend.Node)
-	legendNode.Attr("label", dot.HTML(legendHTML.String()))
-
-	return nil
+	return fmt.Sprintf("component/%s/%s/%s", componentName, direction, p.Name())
 }
 
-// getCycleStats returns basic cycle stats.
-func getCycleStats(activationCycle *cycle.Cycle) []*statEntry {
-	// Initialize all possible activation states with zero values
-	// This ensures all counters are always shown, even when zero
-	statsMap := map[string]*statEntry{
-		"activated": {
-			Name:  "Activated",
-			Value: 0,
-		},
-		// All possible activation result codes
-		fmeshcomponent.ActivationCodeOK.String(): {
-			Name:  fmeshcomponent.ActivationCodeOK.String(),
-			Value: 0,
-		},
-		fmeshcomponent.ActivationCodeNoInput.String(): {
-			Name:  fmeshcomponent.ActivationCodeNoInput.String(),
-			Value: 0,
-		},
-		fmeshcomponent.ActivationCodeReturnedError.String(): {
-			Name:  fmeshcomponent.ActivationCodeReturnedError.String(),
-			Value: 0,
-		},
-		fmeshcomponent.ActivationCodePanicked.String(): {
-			Name:  fmeshcomponent.ActivationCodePanicked.String(),
-			Value: 0,
-		},
-		fmeshcomponent.ActivationCodeWaitingForInputsClear.String(): {
-			Name:  fmeshcomponent.ActivationCodeWaitingForInputsClear.String(),
-			Value: 0,
-		},
-		fmeshcomponent.ActivationCodeWaitingForInputsKeep.String(): {
-			Name:  fmeshcomponent.ActivationCodeWaitingForInputsKeep.String(),
-			Value: 0,
-		},
-	}
-
-	_ = activationCycle.ActivationResults().ForEach(func(ar *fmeshcomponent.ActivationResult) error {
-		if ar.Activated() {
-			statsMap["activated"].Value++
-		}
-
-		// Increment the counter for this activation result code
-		// All possible codes are pre-initialized above
-		if entryByCode, ok := statsMap[ar.Code().String()]; ok {
-			entryByCode.Value++
-		}
-		return nil
-	})
-
-	// Convert to slice to preserve keys order
-	statsList := make([]*statEntry, 0, len(statsMap))
-	for _, entry := range statsMap {
-		statsList = append(statsList, entry)
-	}
-
-	sort.Slice(statsList, func(i, j int) bool {
-		return statsList[i].Name < statsList[j].Name
-	})
-	return statsList
-}
-
-// getPortID returns unique ID used to locate ports while building pipe edges.
-func getPortID(componentName string, portDirection port.Direction, portName string) string {
-	return fmt.Sprintf("component/%s/%s/%s", componentName, portDirectionToString(portDirection), portName)
-}
-
-// setAttrMap sets all attributes to target.
+// setAttrMap sets all attributes on target.
 func setAttrMap(target *dot.AttributesMap, attributes attributesMap) {
-	for attrName, attrValue := range attributes {
-		target.Attr(attrName, attrValue)
+	for name, value := range attributes {
+		target.Attr(name, value)
 	}
 }
 
-func portDirectionToString(portDirection port.Direction) string {
-	switch portDirection {
-	case port.DirectionIn:
-		return "in"
-	case port.DirectionOut:
-		return "out"
-	default:
-		return "unknown"
-	}
-}
+var legendTemplate = template.Must(template.New("legend").Parse(legendHTML))
