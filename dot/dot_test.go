@@ -2,6 +2,7 @@ package dot
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"testing"
 
@@ -226,4 +227,57 @@ func TestPlugin_ExportRejectsPipeOutOfMesh(t *testing.T) {
 
 	_, err = plugin.Export()
 	require.ErrorContains(t, err, "not in the mesh")
+}
+
+// failingAfterCycle is a plugin whose AfterCycle hook fails. Plugins initialize
+// in name order and its name sorts first, so its hook runs before any the
+// exporter registers.
+type failingAfterCycle struct{}
+
+func (failingAfterCycle) Name() string { return "0-failing-after-cycle" }
+
+func (failingAfterCycle) Init(fm *fmesh.FMesh) error {
+	fm.SetupHooks(func(h *fmesh.Hooks) {
+		h.AfterCycle(func(context.Context, *fmesh.CycleContext) error {
+			return errors.New("after cycle failed")
+		})
+	})
+	return nil
+}
+
+// oneComponentMesh builds a seeded single-component mesh with the given plugins.
+func oneComponentMesh(t *testing.T, plugins ...fmesh.Plugin) *fmesh.FMesh {
+	t.Helper()
+	fm := mustNewFMesh(t, "one", fmesh.WithPlugins(plugins...))
+	c := mustNewComponent(t, "c",
+		component.WithInputs("in"),
+		component.WithActivationFunc(func(context.Context, *component.Component) error { return nil }))
+	require.NoError(t, fm.AddComponents(c))
+	require.NoError(t, c.InputByName("in").PutSignals(signal.New(1)))
+	return fm
+}
+
+func TestPlugin_RecordsEveryCycleOnce(t *testing.T) {
+	t.Run("a second Init with the same mesh registers nothing", func(t *testing.T) {
+		plugin := New(WithCycles())
+		fm := oneComponentMesh(t, plugin)
+		require.NoError(t, plugin.Init(fm))
+
+		ri, err := fm.Run(t.Context())
+		require.NoError(t, err)
+		graphs, err := plugin.ExportCycles()
+		require.NoError(t, err)
+		assert.Len(t, graphs, ri.Cycles.Len())
+	})
+
+	t.Run("another plugin's failing AfterCycle hook does not drop the cycle", func(t *testing.T) {
+		plugin := New(WithCycles())
+		fm := oneComponentMesh(t, failingAfterCycle{}, plugin)
+
+		ri, err := fm.Run(t.Context())
+		require.Error(t, err)
+		graphs, err := plugin.ExportCycles()
+		require.NoError(t, err)
+		assert.Len(t, graphs, ri.Cycles.Len())
+	})
 }
