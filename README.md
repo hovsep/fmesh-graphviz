@@ -17,13 +17,18 @@ import "github.com/hovsep/fmesh-graphviz/dot"
 
 graphviz := dot.New()
 fm, err := fmesh.New("mesh", fmesh.WithPlugins(graphviz))
+if err != nil {
+    return err
+}
 // ... add components and pipes ...
 
 graph, err := graphviz.Export() // DOT source; nil for an empty mesh
 if err != nil {
     return err
 }
-err = os.WriteFile("mesh.dot", graph, 0o644)
+if err := os.WriteFile("mesh.dot", graph, 0o644); err != nil {
+    return err
+}
 ```
 
 For a mesh that is already built without the plugin, call the package function: `dot.Export(fm)`
@@ -45,6 +50,9 @@ Create the plugin with `WithCycles`. It records every cycle of the latest run, s
 ```go
 graphviz := dot.New(dot.WithCycles())
 fm, err := fmesh.New("mesh", fmesh.WithPlugins(graphviz))
+if err != nil {
+    return err
+}
 // ... build and seed the mesh ...
 
 if _, err := fm.Run(ctx); err != nil {
@@ -55,7 +63,9 @@ if err != nil {
     return err
 }
 for i, graph := range graphs {
-    _ = os.WriteFile(fmt.Sprintf("cycle-%03d.dot", i+1), graph, 0o644)
+    if err := os.WriteFile(fmt.Sprintf("cycle-%03d.dot", i+1), graph, 0o644); err != nil {
+        return err
+    }
 }
 ```
 

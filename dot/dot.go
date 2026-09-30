@@ -73,7 +73,10 @@ func (p *Plugin) Name() string { return "dot" }
 
 // Init attaches the plugin to the mesh and, with WithCycles, starts recording.
 func (p *Plugin) Init(fm *fmesh.FMesh) error {
-	if p.fm != nil && p.fm != fm {
+	if p.fm == fm {
+		return nil // already attached: the hooks are registered once
+	}
+	if p.fm != nil {
 		return errors.New("dot: plugin is already attached to another mesh")
 	}
 	p.fm = fm
@@ -85,8 +88,10 @@ func (p *Plugin) Init(fm *fmesh.FMesh) error {
 				return nil
 			})
 			// Recorded here rather than read from RuntimeInfo, so a cycles history
-			// limit does not cut the replay short.
-			h.AfterCycle(func(_ context.Context, cc *fmesh.CycleContext) error {
+			// limit does not cut the replay short. BeforeCycle gets the same cycle
+			// the run then fills in, and unlike AfterCycle it cannot be skipped by
+			// another plugin's failing AfterCycle hook.
+			h.BeforeCycle(func(_ context.Context, cc *fmesh.CycleContext) error {
 				p.cycles = append(p.cycles, cc.Cycle)
 				return nil
 			})
