@@ -1,6 +1,10 @@
 package dot
 
-import fmeshcomponent "github.com/hovsep/fmesh/component"
+import (
+	"maps"
+
+	fmeshcomponent "github.com/hovsep/fmesh/component"
+)
 
 type attributesMap map[string]string
 
@@ -11,115 +15,95 @@ const (
 	attrStyle    = "style"
 )
 
-// ComponentConfig defines the configuration for the component visualization.
-type ComponentConfig struct {
-	Subgraph                                 attributesMap
-	SubgraphNodeBaseAttrs                    attributesMap
-	Node                                     attributesMap
-	NodeDefaultLabel                         string
-	ErrorNode                                attributesMap
-	SubgraphAttributesByActivationResultCode map[fmeshcomponent.ActivationResultCode]attributesMap
+// Element names a part of the drawing that WithAttrs styles.
+type Element int
+
+// Drawing elements.
+const (
+	Graph          Element = iota // the whole graph
+	Component                     // a component's cluster
+	ComponentNodes                // defaults for every node inside a component's cluster
+	ComponentNode                 // the node standing for the component itself
+	ErrorNode                     // the activation-error node of a cycle graph
+	Port                          // a port node
+	Pipe                          // a pipe edge
+	Legend                        // the legend cluster
+	LegendNode                    // the legend's text node
+)
+
+// style is the rendering configuration. Options change it one piece at a time
+// on top of defaultStyle, so an option never resets what it does not mention.
+type style struct {
+	attrs          map[Element]attributesMap
+	resultAttrs    map[fmeshcomponent.ActivationResultCode]attributesMap
+	componentLabel string
 }
 
-// PortConfig defines the configuration for the port visualization.
-type PortConfig struct {
-	Node attributesMap
-}
-
-// LegendConfig defines the configuration for the legend visualization.
-type LegendConfig struct {
-	Subgraph attributesMap
-	Node     attributesMap
-}
-
-// PipeConfig defines the configuration for the pipe visualization.
-type PipeConfig struct {
-	Edge attributesMap
-}
-
-// Config defines the configuration for the dot exporter.
-type Config struct {
-	MainGraph attributesMap
-	Component ComponentConfig
-	Port      PortConfig
-	Pipe      PipeConfig
-	Legend    LegendConfig
-}
-
-var (
-	defaultConfig = &Config{
-		MainGraph: attributesMap{
-			"layout":  "dot",
-			"splines": "ortho",
-		},
-		Component: ComponentConfig{
-			Subgraph: attributesMap{
+func defaultStyle() *style {
+	return &style{
+		attrs: map[Element]attributesMap{
+			Graph: {
+				"layout":  "dot",
+				"splines": "ortho",
+			},
+			Component: {
 				attrStyle:    "rounded",
 				attrColor:    "black",
 				"margin":     "20",
 				attrPenwidth: "5",
 			},
-			SubgraphNodeBaseAttrs: attributesMap{
+			ComponentNodes: {
 				"fontname":   "Courier New",
 				"width":      "1.0",
 				"height":     "1.0",
 				attrPenwidth: "2.5",
 				attrStyle:    "filled",
 			},
-			Node: attributesMap{
+			ComponentNode: {
 				attrShape: "rect",
 				attrColor: "#9dddea",
 				attrStyle: "filled",
 			},
-			NodeDefaultLabel: "𝑓",
-			ErrorNode:        nil,
-			SubgraphAttributesByActivationResultCode: map[fmeshcomponent.ActivationResultCode]attributesMap{
-				fmeshcomponent.ActivationCodeOK: {
-					attrColor: "green",
-				},
-				fmeshcomponent.ActivationCodeNoInput: {
-					attrColor: "yellow",
-				},
-				fmeshcomponent.ActivationCodeReturnedError: {
-					attrColor: "red",
-				},
-				fmeshcomponent.ActivationCodePanicked: {
-					attrColor: "pink",
-				},
-				fmeshcomponent.ActivationCodeWaitingForInputsClear: {
-					attrColor: "blue",
-				},
-				fmeshcomponent.ActivationCodeWaitingForInputsKeep: {
-					attrColor: "purple",
-				},
-			},
-		},
-		Port: PortConfig{
-			Node: attributesMap{
+			Port: {
 				attrShape: "circle",
 			},
-		},
-		Pipe: PipeConfig{
-			Edge: attributesMap{
+			Pipe: {
 				"minlen":     "3",
 				attrPenwidth: "2",
 				attrColor:    "#e437ea",
 			},
-		},
-		Legend: LegendConfig{
-			Subgraph: attributesMap{
+			Legend: {
 				attrStyle:   "dashed,filled",
 				"fillcolor": "#e2c6fc",
 			},
-			Node: attributesMap{
+			LegendNode: {
 				attrShape:  "plaintext",
 				attrColor:  "green",
 				"fontname": "Courier New",
 			},
 		},
+		resultAttrs: map[fmeshcomponent.ActivationResultCode]attributesMap{
+			fmeshcomponent.ActivationCodeOK:                    {attrColor: "green"},
+			fmeshcomponent.ActivationCodeNoInput:               {attrColor: "yellow"},
+			fmeshcomponent.ActivationCodeReturnedError:         {attrColor: "red"},
+			fmeshcomponent.ActivationCodePanicked:              {attrColor: "pink"},
+			fmeshcomponent.ActivationCodeWaitingForInputsClear: {attrColor: "blue"},
+			fmeshcomponent.ActivationCodeWaitingForInputsKeep:  {attrColor: "purple"},
+			fmeshcomponent.ActivationCodeHookFailed:            {attrColor: "orange"},
+		},
+		componentLabel: "𝑓",
 	}
+}
 
-	legendTemplate = `
+// merge sets attrs over the current ones for a key, creating the map if needed.
+func merge[K comparable](m map[K]attributesMap, key K, attrs map[string]string) {
+	if m[key] == nil {
+		m[key] = attributesMap{}
+	}
+	maps.Copy(m[key], attrs)
+}
+
+const legendHTML = `
 	<table border="0" cellborder="0" cellspacing="10">
 			{{ if .meshDescription }}
 			<tr>
@@ -142,4 +126,3 @@ var (
 			{{ end }}
 	</table>
 	`
-)
