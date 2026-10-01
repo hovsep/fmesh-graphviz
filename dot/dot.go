@@ -63,6 +63,9 @@ func (e *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
 // cycle stats. A component with no result in c had no input. An empty mesh
 // exports nothing.
 func (e *Exporter) ExportCycle(fm *fmesh.FMesh, c *cycle.Cycle) ([]byte, error) {
+	if c == nil {
+		return nil, export.ErrNilCycle
+	}
 	return e.render(fm, c)
 }
 
