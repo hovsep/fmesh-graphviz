@@ -1,4 +1,4 @@
-module github.com/hovsep/fmesh-graphviz
+module github.com/hovsep/fmesh-export
 
 go 1.27
 
