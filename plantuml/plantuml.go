@@ -153,7 +153,7 @@ func (b *diagramBuilder) VisitComponent(c *component.Component) error {
 			style = fmt.Sprintf(" #line:%s;line.bold", strings.TrimPrefix(color, "#"))
 		}
 		if result != nil && result.ActivationError() != nil {
-			b.note = escape(result.ActivationError().Error())
+			b.note = escape(errorText(result))
 		}
 	}
 	fmt.Fprintf(&b.out, "component \"%s\" as %s%s {\n", label, b.component, style)
@@ -208,4 +208,14 @@ func escape(s string) string {
 
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// errorText joins a result's activation errors with "; ". The label is one
+// line, so the newlines of ActivationError would leave "e1 e2" ambiguous.
+func errorText(result *component.ActivationResult) string {
+	msgs := make([]string, 0, len(result.ActivationErrors()))
+	for _, err := range result.ActivationErrors() {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
 }

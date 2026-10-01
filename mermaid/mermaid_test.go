@@ -172,6 +172,21 @@ func TestExporter_ExportCycle(t *testing.T) {
 		assert.Contains(t, charts[0], "style s4 stroke:teal")
 		assert.Contains(t, charts[0], "style s1 stroke:gold", "codes the option does not name keep their defaults")
 	})
+
+	t.Run("joins the errors of several attempts", func(t *testing.T) {
+		fm := mustNewFMesh(t, "retry", fmesh.WithErrorHandlingStrategy(fmesh.IgnoreAll))
+		require.NoError(t, fm.AddComponents(mustNewComponent(t, "c",
+			component.WithInputs("in"),
+			component.WithRetry(2),
+			component.WithActivationFunc(func(context.Context, *component.Component) error {
+				return errors.New("boom")
+			}))))
+		require.NoError(t, fm.ComponentByName("c").InputByName("in").PutSignals(signal.New(1)))
+
+		charts := runAndExportCycles(t, New(), fm)
+		require.NotEmpty(t, charts)
+		assert.Contains(t, charts[0], "    c2 -.- e3>\"component returned an error: attempt 1 of 2: boom; component returned an error: attempt 2 of 2: boom\"]\n")
+	})
 }
 
 func TestExporter_Options(t *testing.T) {
