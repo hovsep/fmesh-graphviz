@@ -138,6 +138,14 @@ func TestExport(t *testing.T) {
 	assert.Equal(t, string(want), string(got))
 }
 
+func TestExport_RejectsUnknownDirection(t *testing.T) {
+	// The package function must check options as Init does, or it emits an
+	// invalid flowchart.
+	fm := mustNewFMesh(t, "m")
+	_, err := Export(fm, WithDirection("sideways"))
+	require.ErrorContains(t, err, `unknown direction "sideways"`)
+}
+
 func TestPlugin_Init(t *testing.T) {
 	t.Run("one mesh per instance", func(t *testing.T) {
 		plugin := New()

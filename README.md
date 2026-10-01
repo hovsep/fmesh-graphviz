@@ -15,7 +15,7 @@ JSON export is bundled with fmesh itself: [`plugin/jsonexport`](https://github.c
 ## Install
 
 ```bash
-go get github.com/hovsep/fmesh-export
+go get github.com/hovsep/fmesh-export/mermaid  # or /dot, /d2, /plantuml
 ```
 
 ## Usage

@@ -13,7 +13,7 @@ It is an fmesh plugin: attach it with `fmesh.WithPlugins`.
 ## Install
 
 ```sh
-go get github.com/hovsep/fmesh-export
+go get github.com/hovsep/fmesh-export/d2
 ```
 
 ## Static diagram
