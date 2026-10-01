@@ -23,27 +23,21 @@ import (
 	"github.com/hovsep/fmesh-export/mermaid"
 	"github.com/hovsep/fmesh-export/plantuml"
 	"github.com/hovsep/fmesh/component"
+	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/port"
 )
 
-// exporter is what every format plugin in this module provides.
-type exporter interface {
-	fmesh.Plugin
-	Export() ([]byte, error)
-	ExportCycles() ([][]byte, error)
-}
-
-// format is an export format: its file extension and a cycle-recording plugin.
+// format is an export format: its file extension and its exporter.
 type format struct {
-	ext    string
-	plugin func() exporter
+	ext      string
+	exporter export.Exporter
 }
 
 var formats = map[string]format{
-	"dot":      {"dot", func() exporter { return dot.New(dot.WithCycles()) }},
-	"mermaid":  {"mmd", func() exporter { return mermaid.New(mermaid.WithCycles()) }},
-	"d2":       {"d2", func() exporter { return d2.New(d2.WithCycles()) }},
-	"plantuml": {"puml", func() exporter { return plantuml.New(plantuml.WithCycles()) }},
+	"dot":      {"dot", dot.New()},
+	"mermaid":  {"mmd", mermaid.New()},
+	"d2":       {"d2", d2.New()},
+	"plantuml": {"puml", plantuml.New()},
 }
 
 func main() {
@@ -66,26 +60,23 @@ func main() {
 }
 
 func run(f format, dir string) error {
-	plugin := f.plugin()
-	fm, err := buildMesh(plugin)
+	fm, err := buildMesh()
 	if err != nil {
 		return err
 	}
 	if err = fm.ComponentByName("orders").InputByName("start").PutPayloads(true); err != nil {
 		return err
 	}
-	if _, err = fm.Run(context.Background()); err != nil {
+	ri, err := fm.Run(context.Background())
+	if err != nil {
 		return fmt.Errorf("run: %w", err)
 	}
 
-	static, err := plugin.Export()
+	static, err := f.exporter.Export(fm)
 	if err != nil {
 		return err
 	}
-	cycles, err := plugin.ExportCycles()
-	if err != nil {
-		return err
-	}
+	cycles := ri.Cycles.All()
 
 	// The output dir is the caller's own argument; os.Root keeps every file
 	// inside it.
@@ -101,7 +92,11 @@ func run(f format, dir string) error {
 	if err = root.WriteFile("static."+f.ext, static, 0o600); err != nil {
 		return err
 	}
-	for i, graph := range cycles {
+	for i, c := range cycles {
+		var graph []byte
+		if graph, err = f.exporter.ExportCycle(fm, c); err != nil {
+			return fmt.Errorf("cycle %d: %w", c.Number(), err)
+		}
 		if err = root.WriteFile(fmt.Sprintf("cycle-%03d.%s", i+1, f.ext), graph, 0o600); err != nil {
 			return err
 		}
@@ -131,7 +126,7 @@ func forward(fn func(amount float64) float64, outputs ...string) component.Activ
 
 func same(amount float64) float64 { return amount }
 
-func buildMesh(plugin fmesh.Plugin) (*fmesh.FMesh, error) {
+func buildMesh() (*fmesh.FMesh, error) {
 	var components []*component.Component
 	add := func(name, description string, opts ...component.Option) {
 		c, err := component.New(name, append(opts, component.WithDescription(description))...)
@@ -202,8 +197,7 @@ func buildMesh(plugin fmesh.Plugin) (*fmesh.FMesh, error) {
 
 	fm, err := fmesh.New("order-processing",
 		fmesh.WithDescription("Order processing: fan-out, fan-in, an error and a wait"),
-		fmesh.WithErrorHandlingStrategy(fmesh.IgnoreAll),
-		fmesh.WithPlugins(plugin))
+		fmesh.WithErrorHandlingStrategy(fmesh.IgnoreAll))
 	if err != nil {
 		return nil, err
 	}

@@ -1,27 +1,20 @@
-// Package mermaid provides [Plugin], a mesh plugin that exports an fmesh mesh
-// as a Mermaid flowchart: the static structure, and optionally one chart per
-// cycle with components colored by their activation result.
+// Package mermaid provides [Exporter], which exports an fmesh mesh as a
+// Mermaid flowchart: the structure, or the structure in the state of one cycle
+// with components colored by their activation result.
 package mermaid
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/hovsep/fmesh"
 	"github.com/hovsep/fmesh/component"
 	"github.com/hovsep/fmesh/cycle"
+	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/port"
 )
 
-var (
-	// ErrNotAttached is returned by an export before the plugin is attached to a mesh.
-	ErrNotAttached = errors.New("mermaid: plugin is not attached to a mesh")
-
-	// ErrCyclesNotRecorded is returned by ExportCycles when the plugin was created without WithCycles.
-	ErrCyclesNotRecorded = errors.New("mermaid: cycles are not recorded, create the plugin with WithCycles")
-)
+var _ export.Exporter = (*Exporter)(nil)
 
 // defaultColors returns a fresh copy of the default stroke colors of a
 // component in a cycle chart, by activation result.
@@ -37,131 +30,65 @@ func defaultColors() map[component.ActivationResultCode]string {
 	}
 }
 
-// Plugin exports the mesh it is attached to as a Mermaid flowchart. One
-// instance serves one mesh.
-type Plugin struct {
-	direction    string
-	colors       map[component.ActivationResultCode]string
-	recordCycles bool
-	fm           *fmesh.FMesh
-	cycles       []*cycle.Cycle
+// Exporter exports a mesh as a Mermaid flowchart. It holds only its options,
+// so one value can export many meshes, also from an AfterCycle hook.
+type Exporter struct {
+	direction string
+	colors    map[component.ActivationResultCode]string
 }
 
-// Option configures a Plugin.
-type Option func(*Plugin)
+// Option configures an Exporter.
+type Option func(*Exporter)
 
 // WithDirection sets the flowchart direction: "LR" (the default), "RL", "TB" or "BT".
 func WithDirection(direction string) Option {
-	return func(p *Plugin) { p.direction = direction }
+	return func(e *Exporter) { e.direction = direction }
 }
 
 // WithResultColor sets the stroke color of a component in a cycle chart when its
 // activation ended with code. Codes it does not name keep their default colors.
 func WithResultColor(code component.ActivationResultCode, color string) Option {
-	return func(p *Plugin) { p.colors[code] = color }
+	return func(e *Exporter) { e.colors[code] = color }
 }
 
-// WithCycles records every cycle of the latest run, for ExportCycles.
-func WithCycles() Option {
-	return func(p *Plugin) { p.recordCycles = true }
-}
-
-// New returns a plugin to attach with fmesh.WithPlugins.
-func New(opts ...Option) *Plugin {
-	p := &Plugin{direction: "LR", colors: defaultColors()}
+// New returns an exporter with the given options. Export and ExportCycle
+// report an invalid option.
+func New(opts ...Option) *Exporter {
+	e := &Exporter{direction: "LR", colors: defaultColors()}
 	for _, opt := range opts {
-		opt(p)
+		opt(e)
 	}
-	return p
-}
-
-// Name returns the plugin name.
-func (p *Plugin) Name() string { return "mermaid" }
-
-// Init attaches the plugin to the mesh and, with WithCycles, starts recording.
-func (p *Plugin) Init(fm *fmesh.FMesh) error {
-	if err := p.validate(); err != nil {
-		return err
-	}
-	if p.fm == fm {
-		return nil // already attached: the hooks are registered once
-	}
-	if p.fm != nil {
-		return errors.New("mermaid: plugin is already attached to another mesh")
-	}
-	p.fm = fm
-
-	if p.recordCycles {
-		fm.SetupHooks(func(h *fmesh.Hooks) {
-			h.BeforeRun(func(context.Context, *fmesh.FMesh) error {
-				p.cycles = nil
-				return nil
-			})
-			// Recorded here rather than read from RuntimeInfo, so a cycles history
-			// limit does not cut the replay short. BeforeCycle gets the same cycle
-			// the run then fills in, and unlike AfterCycle it cannot be skipped by
-			// another plugin's failing AfterCycle hook.
-			h.BeforeCycle(func(_ context.Context, cc *fmesh.CycleContext) error {
-				p.cycles = append(p.cycles, cc.Cycle)
-				return nil
-			})
-		})
-	}
-	return nil
-}
-
-// Export returns fm's structure as Mermaid flowchart source, for a mesh built without the
-// plugin. opts style it as they would the plugin; WithCycles has no effect.
-func Export(fm *fmesh.FMesh, opts ...Option) ([]byte, error) {
-	p := New(opts...)
-	if err := p.validate(); err != nil {
-		return nil, err
-	}
-	p.fm = fm
-	return p.Export()
-}
-
-// validate rejects options that would produce an invalid chart.
-func (p *Plugin) validate() error {
-	switch p.direction {
-	case "LR", "RL", "TB", "BT":
-		return nil
-	default:
-		return fmt.Errorf("mermaid: unknown direction %q", p.direction)
-	}
+	return e
 }
 
 // Export returns the mesh structure as Mermaid flowchart source.
-func (p *Plugin) Export() ([]byte, error) {
-	if p.fm == nil {
-		return nil, ErrNotAttached
-	}
-	return p.render(nil)
+func (e *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
+	return e.render(fm, nil)
 }
 
-// ExportCycles returns one chart per cycle of the latest run, in order, with
-// components colored by their activation result.
-func (p *Plugin) ExportCycles() ([][]byte, error) {
-	if p.fm == nil {
-		return nil, ErrNotAttached
-	}
-	if !p.recordCycles {
-		return nil, ErrCyclesNotRecorded
-	}
-	charts := make([][]byte, 0, len(p.cycles))
-	for _, c := range p.cycles {
-		chart, err := p.render(c)
-		if err != nil {
-			return nil, fmt.Errorf("cycle %d: %w", c.Number(), err)
-		}
-		charts = append(charts, chart)
-	}
-	return charts, nil
+// ExportCycle returns the mesh as Mermaid flowchart source in the state of
+// cycle c, with components colored by their activation result. A component
+// with no result in c had no input.
+func (e *Exporter) ExportCycle(fm *fmesh.FMesh, c *cycle.Cycle) ([]byte, error) {
+	return e.render(fm, c)
 }
 
-func (p *Plugin) render(activationCycle *cycle.Cycle) ([]byte, error) {
-	b := &chartBuilder{plugin: p, cycle: activationCycle, ports: make(map[*port.Port]string)}
-	if err := p.fm.Walk(b); err != nil {
+// validate rejects options that would produce an invalid chart.
+func (e *Exporter) validate() error {
+	switch e.direction {
+	case "LR", "RL", "TB", "BT":
+		return nil
+	default:
+		return fmt.Errorf("mermaid: unknown direction %q", e.direction)
+	}
+}
+
+func (e *Exporter) render(fm *fmesh.FMesh, activationCycle *cycle.Cycle) ([]byte, error) {
+	if err := e.validate(); err != nil {
+		return nil, err
+	}
+	b := &chartBuilder{exporter: e, cycle: activationCycle, ports: make(map[*port.Port]string)}
+	if err := fm.Walk(b); err != nil {
 		return nil, err
 	}
 	b.closeSubgraph()
@@ -171,8 +98,8 @@ func (p *Plugin) render(activationCycle *cycle.Cycle) ([]byte, error) {
 // chartBuilder writes a flowchart from a walk. Node IDs are generated in walk
 // order, so they are stable and never depend on user-chosen names.
 type chartBuilder struct {
-	plugin *Plugin
-	cycle  *cycle.Cycle
+	exporter *Exporter
+	cycle    *cycle.Cycle
 
 	out          strings.Builder
 	nodes        int
@@ -191,7 +118,7 @@ func (b *chartBuilder) VisitMesh(fm *fmesh.FMesh) error {
 	if b.cycle != nil {
 		title = fmt.Sprintf("%s — cycle %d", title, b.cycle.Number())
 	}
-	fmt.Fprintf(&b.out, "---\ntitle: %s\n---\nflowchart %s\n", quote(title), b.plugin.direction)
+	fmt.Fprintf(&b.out, "---\ntitle: %s\n---\nflowchart %s\n", quote(title), b.exporter.direction)
 	if fm.Description() != "" {
 		fmt.Fprintf(&b.out, "  %%%% %s\n", oneLine(fm.Description()))
 	}
@@ -217,7 +144,7 @@ func (b *chartBuilder) VisitComponent(c *component.Component) error {
 		if result != nil {
 			code = result.Code()
 		}
-		if color, ok := b.plugin.colors[code]; ok {
+		if color, ok := b.exporter.colors[code]; ok {
 			fmt.Fprintf(&b.out, "    style %s stroke:%s,stroke-width:3px\n", subgraph, color)
 		}
 		if result != nil && result.ActivationError() != nil {

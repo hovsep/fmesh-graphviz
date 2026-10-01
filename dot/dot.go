@@ -1,11 +1,9 @@
-// Package dot provides [Plugin], a mesh plugin that exports an fmesh mesh as a
-// Graphviz DOT graph: the static structure, and optionally one graph per cycle.
+// Package dot provides [Exporter], which exports an fmesh mesh as a Graphviz
+// DOT graph: the structure, or the structure in the state of one cycle.
 package dot
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"fmt"
 	"html/template"
 
@@ -13,141 +11,68 @@ import (
 	"github.com/hovsep/fmesh"
 	fmeshcomponent "github.com/hovsep/fmesh/component"
 	"github.com/hovsep/fmesh/cycle"
+	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/port"
 )
 
-var (
-	// ErrNotAttached is returned by an export before the plugin is attached to a mesh.
-	ErrNotAttached = errors.New("dot: plugin is not attached to a mesh")
+var _ export.Exporter = (*Exporter)(nil)
 
-	// ErrCyclesNotRecorded is returned by ExportCycles when the plugin was created without WithCycles.
-	ErrCyclesNotRecorded = errors.New("dot: cycles are not recorded, create the plugin with WithCycles")
-)
-
-// Plugin exports the mesh it is attached to as a Graphviz DOT graph. One
-// instance serves one mesh.
-type Plugin struct {
-	style        *style
-	recordCycles bool
-	fm           *fmesh.FMesh
-	cycles       []*cycle.Cycle
+// Exporter exports a mesh as a Graphviz DOT graph. It holds only its options,
+// so one value can export many meshes, also from an AfterCycle hook.
+type Exporter struct {
+	style *style
 }
 
-// Option configures a Plugin.
-type Option func(*Plugin)
+// Option configures an Exporter.
+type Option func(*Exporter)
 
 // WithAttrs sets Graphviz attributes on one element of the drawing, over the
 // defaults: attributes it does not name keep their default values.
 func WithAttrs(element Element, attrs map[string]string) Option {
-	return func(p *Plugin) { merge(p.style.attrs, element, attrs) }
+	return func(e *Exporter) { merge(e.style.attrs, element, attrs) }
 }
 
 // WithResultAttrs sets attributes on a component's cluster in a cycle graph when
 // its activation ended with code, over the defaults (the colors).
 func WithResultAttrs(code fmeshcomponent.ActivationResultCode, attrs map[string]string) Option {
-	return func(p *Plugin) { merge(p.style.resultAttrs, code, attrs) }
+	return func(e *Exporter) { merge(e.style.resultAttrs, code, attrs) }
 }
 
 // WithComponentLabel sets the label of a component node whose component has no
 // description (default "𝑓").
 func WithComponentLabel(label string) Option {
-	return func(p *Plugin) { p.style.componentLabel = label }
+	return func(e *Exporter) { e.style.componentLabel = label }
 }
 
-// WithCycles records every cycle of the latest run, for ExportCycles.
-func WithCycles() Option {
-	return func(p *Plugin) { p.recordCycles = true }
-}
-
-// New returns a plugin to attach with fmesh.WithPlugins.
-func New(opts ...Option) *Plugin {
-	p := &Plugin{style: defaultStyle()}
+// New returns an exporter with the given options.
+func New(opts ...Option) *Exporter {
+	e := &Exporter{style: defaultStyle()}
 	for _, opt := range opts {
-		opt(p)
+		opt(e)
 	}
-	return p
-}
-
-// Name returns the plugin name.
-func (p *Plugin) Name() string { return "dot" }
-
-// Init attaches the plugin to the mesh and, with WithCycles, starts recording.
-func (p *Plugin) Init(fm *fmesh.FMesh) error {
-	if p.fm == fm {
-		return nil // already attached: the hooks are registered once
-	}
-	if p.fm != nil {
-		return errors.New("dot: plugin is already attached to another mesh")
-	}
-	p.fm = fm
-
-	if p.recordCycles {
-		fm.SetupHooks(func(h *fmesh.Hooks) {
-			h.BeforeRun(func(context.Context, *fmesh.FMesh) error {
-				p.cycles = nil
-				return nil
-			})
-			// Recorded here rather than read from RuntimeInfo, so a cycles history
-			// limit does not cut the replay short. BeforeCycle gets the same cycle
-			// the run then fills in, and unlike AfterCycle it cannot be skipped by
-			// another plugin's failing AfterCycle hook.
-			h.BeforeCycle(func(_ context.Context, cc *fmesh.CycleContext) error {
-				p.cycles = append(p.cycles, cc.Cycle)
-				return nil
-			})
-		})
-	}
-	return nil
-}
-
-// Export returns fm's structure as a DOT graph, for a mesh built without the
-// plugin. opts style it as they would the plugin; WithCycles has no effect.
-func Export(fm *fmesh.FMesh, opts ...Option) ([]byte, error) {
-	p := New(opts...)
-	p.fm = fm
-	return p.Export()
+	return e
 }
 
 // Export returns the mesh structure as a DOT graph. An empty mesh exports nothing.
-func (p *Plugin) Export() ([]byte, error) {
-	if p.fm == nil {
-		return nil, ErrNotAttached
-	}
-	if p.fm.Components().IsEmpty() {
-		return nil, nil
-	}
-	return p.render(nil)
+func (e *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
+	return e.render(fm, nil)
 }
 
-// ExportCycles returns one DOT graph per cycle of the latest run, in order.
-// Each graph colors components by their activation result and shows the cycle
-// stats in the legend.
-func (p *Plugin) ExportCycles() ([][]byte, error) {
-	if p.fm == nil {
-		return nil, ErrNotAttached
-	}
-	if !p.recordCycles {
-		return nil, ErrCyclesNotRecorded
-	}
-	if p.fm.Components().IsEmpty() {
-		return nil, nil
-	}
-
-	graphs := make([][]byte, 0, len(p.cycles))
-	for _, c := range p.cycles {
-		graph, err := p.render(c)
-		if err != nil {
-			return nil, fmt.Errorf("cycle %d: %w", c.Number(), err)
-		}
-		graphs = append(graphs, graph)
-	}
-	return graphs, nil
+// ExportCycle returns the mesh as a DOT graph in the state of cycle c:
+// components are colored by their activation result and the legend shows the
+// cycle stats. A component with no result in c had no input. An empty mesh
+// exports nothing.
+func (e *Exporter) ExportCycle(fm *fmesh.FMesh, c *cycle.Cycle) ([]byte, error) {
+	return e.render(fm, c)
 }
 
 // render draws the mesh, optionally in the state of one cycle.
-func (p *Plugin) render(activationCycle *cycle.Cycle) ([]byte, error) {
-	b := &graphBuilder{style: p.style, cycle: activationCycle, ports: make(map[*port.Port]dot.Node)}
-	if err := p.fm.Walk(b); err != nil {
+func (e *Exporter) render(fm *fmesh.FMesh, activationCycle *cycle.Cycle) ([]byte, error) {
+	if fm.Components().IsEmpty() {
+		return nil, nil
+	}
+	b := &graphBuilder{style: e.style, cycle: activationCycle, ports: make(map[*port.Port]dot.Node)}
+	if err := fm.Walk(b); err != nil {
 		return nil, err
 	}
 	buf := new(bytes.Buffer)

@@ -7,32 +7,27 @@ Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as a [Graphviz DOT](htt
   and a legend shows the cycle stats. Put them together as an animation of the run.
 - **Configurable:** colors, shapes and layout.
 
-It is an fmesh plugin: attach it with `fmesh.WithPlugins`. See the
-[dot package docs](https://pkg.go.dev/github.com/hovsep/fmesh-export/dot) for the API.
+`New(opts...)` returns an `Exporter`. It implements fmesh's
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
+module and `export.JSON()` in fmesh. It holds only its options: reuse one value for many meshes.
+See the [dot package docs](https://pkg.go.dev/github.com/hovsep/fmesh-export/dot) for the API.
 
 ## Static graph
 
 ```go
 import "github.com/hovsep/fmesh-export/dot"
 
-graphviz := dot.New()
-fm, err := fmesh.New("mesh", fmesh.WithPlugins(graphviz))
-if err != nil {
-    return err
-}
-// ... add components and pipes ...
+e := dot.New()
+// ... build fm: add components and pipes ...
 
-graph, err := graphviz.Export() // DOT source; nil for an empty mesh
+src, err := e.Export(fm) // DOT source; nil for an empty mesh
 if err != nil {
     return err
 }
-if err := os.WriteFile("mesh.dot", graph, 0o644); err != nil {
+if err := os.WriteFile("mesh.dot", src, 0o644); err != nil {
     return err
 }
 ```
-
-For a mesh that is already built without the plugin, call the package function: `dot.Export(fm)`
-(it takes the same options).
 
 View it on [edotor.net](https://edotor.net), or render it with Graphviz:
 
@@ -44,29 +39,39 @@ dot -Tsvg mesh.dot -o mesh.svg
 
 ## Per-cycle graphs
 
-Create the plugin with `WithCycles`. It records every cycle of the latest run, so it works even with
-`fmesh.WithCyclesHistoryLimit`.
-
 ```go
-graphviz := dot.New(dot.WithCycles())
-fm, err := fmesh.New("mesh", fmesh.WithPlugins(graphviz))
-if err != nil {
-    return err
-}
-// ... build and seed the mesh ...
+e := dot.New()
+// ... build and seed fm ...
 
-if _, err := fm.Run(ctx); err != nil {
-    return err
-}
-graphs, err := graphviz.ExportCycles() // one graph per cycle, in order
+ri, err := fm.Run(ctx)
 if err != nil {
     return err
 }
-for i, graph := range graphs {
-    if err := os.WriteFile(fmt.Sprintf("cycle-%03d.dot", i+1), graph, 0o644); err != nil {
+for i, c := range ri.Cycles.All() {
+    src, err := e.ExportCycle(fm, c) // one graph for cycle c
+    if err != nil {
+        return err
+    }
+    if err := os.WriteFile(fmt.Sprintf("cycle-%03d.dot", i+1), src, 0o644); err != nil {
         return err
     }
 }
+```
+
+To export while the mesh runs, call `ExportCycle` from an `AfterCycle` hook. This also gets every
+cycle when `fmesh.WithCyclesHistoryLimit` drops old ones from `ri.Cycles`:
+
+```go
+fm.SetupHooks(func(h *fmesh.Hooks) {
+    h.AfterCycle(func(ctx context.Context, cc *fmesh.CycleContext) error {
+        src, err := e.ExportCycle(cc.FMesh, cc.Cycle)
+        if err != nil {
+            return err
+        }
+        // ... write or send src ...
+        return nil
+    })
+})
 ```
 
 Each legend counts the components in every activation state (OK, No input, error, panic, hook failed,
@@ -87,7 +92,7 @@ convert -delay 100 -loop 0 cycle-*.png mesh.gif
 Each option sets attributes on top of the defaults; anything it does not name keeps its default.
 
 ```go
-graphviz := dot.New(
+e := dot.New(
     dot.WithAttrs(dot.Graph, map[string]string{"layout": "neato"}), // dot, neato, fdp, circo, ...
     dot.WithAttrs(dot.ComponentNode, map[string]string{"color": "#ffcc00"}),
     dot.WithResultAttrs(component.ActivationCodeOK, map[string]string{"color": "darkgreen"}),
@@ -100,4 +105,3 @@ graphviz := dot.New(
 | `WithAttrs(element, attrs)` | one element: `Graph`, `Component`, `ComponentNodes`, `ComponentNode`, `ErrorNode`, `Port`, `Pipe`, `Legend`, `LegendNode` |
 | `WithResultAttrs(code, attrs)` | a component's cluster in a cycle graph, by activation result |
 | `WithComponentLabel(label)` | the node of a component with no description (default `𝑓`) |
-| `WithCycles()` | records every cycle for `ExportCycles` |
