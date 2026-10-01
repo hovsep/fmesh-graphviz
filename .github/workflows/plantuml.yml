@@ -1,0 +1,33 @@
+name: PlantUML
+
+# Renders the showcase mesh as PlantUML; see render.yml. Runs only when something
+# the PlantUML output depends on changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "plantuml/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/plantuml.yml"
+      - ".github/workflows/render.yml"
+  pull_request:
+    paths:
+      - "plantuml/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/plantuml.yml"
+      - ".github/workflows/render.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/render.yml
+    with:
+      format: plantuml

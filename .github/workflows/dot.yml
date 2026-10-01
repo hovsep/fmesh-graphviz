@@ -1,0 +1,33 @@
+name: DOT
+
+# Renders the showcase mesh as DOT; see render.yml. Runs only when something
+# the DOT output depends on changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dot/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/dot.yml"
+      - ".github/workflows/render.yml"
+  pull_request:
+    paths:
+      - "dot/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/dot.yml"
+      - ".github/workflows/render.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/render.yml
+    with:
+      format: dot

@@ -1,0 +1,33 @@
+name: D2
+
+# Renders the showcase mesh as D2; see render.yml. Runs only when something
+# the D2 output depends on changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "d2/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/d2.yml"
+      - ".github/workflows/render.yml"
+  pull_request:
+    paths:
+      - "d2/**"
+      - "internal/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/d2.yml"
+      - ".github/workflows/render.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/render.yml
+    with:
+      format: d2

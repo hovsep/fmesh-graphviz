@@ -1,0 +1,168 @@
+name: Render
+
+# Reusable: renders the showcase mesh (internal/cmd/showcase) in one export
+# format. Called by one workflow per format (dot.yml, mermaid.yml, d2.yml,
+# plantuml.yml), so each format runs, passes and fails on its own.
+#
+# Every run uploads the images as an artifact. A push to main also publishes
+# them to the ci-graphs branch and embeds them in the run's summary page; pull
+# requests skip that, as fork PRs get no write token.
+on:
+  workflow_call:
+    inputs:
+      format:
+        description: "dot, mermaid, d2 or plantuml"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORMAT: ${{ inputs.format }}
+  # Images are published here: <commit>/<format>/ and latest/<format>/.
+  GRAPHS_BRANCH: ci-graphs
+  # How many commits keep their images on the branch.
+  KEEP: 30
+
+jobs:
+  render:
+    name: Render the showcase mesh
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: render-${{ inputs.format }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install renderer
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq imagemagick
+          case "$FORMAT" in
+            dot)
+              sudo apt-get install -y -qq graphviz ;;
+            plantuml)
+              # The distro package is too old for component ports; PlantUML
+              # also needs Graphviz to lay component diagrams out.
+              sudo apt-get install -y -qq graphviz
+              curl -fsSL -o "$RUNNER_TEMP/plantuml.jar" \
+                https://github.com/plantuml/plantuml/releases/latest/download/plantuml.jar ;;
+            d2)
+              curl -fsSL https://d2lang.com/install.sh | sh -s -- ;;
+            mermaid)
+              npm install -g --silent @mermaid-js/mermaid-cli
+              # Ubuntu's AppArmor blocks Chromium's sandbox on the runner.
+              echo '{"args":["--no-sandbox"]}' > "$RUNNER_TEMP/puppeteer.json" ;;
+            *)
+              echo "unknown format $FORMAT" >&2; exit 1 ;;
+          esac
+
+      - name: Export the showcase mesh
+        run: go run ./internal/cmd/showcase -format "$FORMAT" out
+
+      - name: Render images
+        working-directory: out
+        run: |
+          set -euo pipefail
+          for src in static.* cycle-*; do
+            png="${src%.*}.png"
+            case "$FORMAT" in
+              dot)      dot -Tpng -Gdpi=96 "$src" -o "$png" ;;
+              plantuml) java -jar "$RUNNER_TEMP/plantuml.jar" -tpng "$src" ;;
+              d2)       d2 --pad 20 "$src" "$png" ;;
+              mermaid)  mmdc -q -p "$RUNNER_TEMP/puppeteer.json" -b white -i "$src" -o "$png" ;;
+            esac
+          done
+          convert -delay 120 -loop 0 cycle-*.png cycles.gif
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: graph-${{ inputs.format }}
+          path: out
+
+      - name: Publish images
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          # Each format publishes from its own workflow, possibly at the same
+          # moment. The push only lands if the branch is still where this
+          # attempt read it; otherwise start over from the new state.
+          for attempt in 1 2 3 4 5; do
+            site=$(mktemp -d)
+            if git ls-remote --exit-code --heads "$remote" "$GRAPHS_BRANCH" >/dev/null; then
+              git clone -q --depth 1 --branch "$GRAPHS_BRANCH" "$remote" "$site"
+              base=$(git -C "$site" rev-parse HEAD)
+            else
+              git init -q "$site"
+              base=""
+            fi
+
+            (
+              cd "$site"
+              for dir in "$SHA/$FORMAT" "latest/$FORMAT"; do
+                rm -rf "$dir" && mkdir -p "$dir"
+                cp "$GITHUB_WORKSPACE"/out/static.png "$GITHUB_WORKSPACE"/out/cycles.gif "$dir"/
+              done
+
+              # index.txt lists published commits, newest first; drop the oldest.
+              { echo "$SHA"; grep -vx "$SHA" index.txt 2>/dev/null || true; } > index.new
+              head -n "$KEEP" index.new > index.txt
+              tail -n +"$((KEEP + 1))" index.new | xargs -r rm -rf
+              rm index.new
+
+              # One squashed commit, force-pushed: old images leave the history
+              # too, so the branch stays small.
+              git checkout -q --orphan publish
+              git add -A
+              git -c user.name="github-actions[bot]" \
+                  -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+                  commit -q -m "Mesh graphs for ${SHA}"
+            )
+
+            if git -C "$site" push -q --force-with-lease="refs/heads/${GRAPHS_BRANCH}:${base}" \
+                "$remote" "publish:refs/heads/${GRAPHS_BRANCH}"; then
+              exit 0
+            fi
+            echo "ci-graphs moved under us (attempt $attempt), retrying"
+            sleep $((attempt * 3))
+          done
+          echo "could not publish after 5 attempts" >&2
+          exit 1
+
+      - name: Summary
+        env:
+          SHA: ${{ github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          {
+            echo "## Showcase mesh — ${FORMAT}"
+            echo
+            if [ "$EVENT" = push ]; then
+              base="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GRAPHS_BRANCH}/${SHA}/${FORMAT}"
+              echo "### Structure"
+              echo "![Showcase mesh](${base}/static.png)"
+              echo
+              echo "### Run replay, one frame per cycle"
+              echo "![Cycles](${base}/cycles.gif)"
+            else
+              echo "Pull requests do not publish images. Download the **graph-${FORMAT}** artifact of this run to see them."
+            fi
+            echo
+            echo "Cycles rendered: $(ls out/cycle-*.png | wc -l)"
+          } >> "$GITHUB_STEP_SUMMARY"

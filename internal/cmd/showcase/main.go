@@ -1,37 +1,73 @@
 // Command showcase builds and runs an order-processing mesh, then writes its
-// DOT graphs to a directory: static.dot and one cycle-NNN.dot per cycle. CI
-// renders them, so every change to the exporter shows up as a picture.
+// graphs in one export format to a directory: static.<ext> and one
+// cycle-NNN.<ext> per cycle. CI renders them, so every change to an exporter
+// shows up as a picture.
 //
-// The mesh covers what the exporter has to draw: fan-out, fan-in, a component
+// The mesh covers what an exporter has to draw: fan-out, fan-in, a component
 // that fails, and one that waits for inputs arriving in different cycles.
 package main
 
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/hovsep/fmesh"
-	"github.com/hovsep/fmesh-graphviz/dot"
+	"github.com/hovsep/fmesh-export/d2"
+	"github.com/hovsep/fmesh-export/dot"
+	"github.com/hovsep/fmesh-export/mermaid"
+	"github.com/hovsep/fmesh-export/plantuml"
 	"github.com/hovsep/fmesh/component"
 	"github.com/hovsep/fmesh/port"
 )
 
+// exporter is what every format plugin in this module provides.
+type exporter interface {
+	fmesh.Plugin
+	Export() ([]byte, error)
+	ExportCycles() ([][]byte, error)
+}
+
+// format is an export format: its file extension and a cycle-recording plugin.
+type format struct {
+	ext    string
+	plugin func() exporter
+}
+
+var formats = map[string]format{
+	"dot":      {"dot", func() exporter { return dot.New(dot.WithCycles()) }},
+	"mermaid":  {"mmd", func() exporter { return mermaid.New(mermaid.WithCycles()) }},
+	"d2":       {"d2", func() exporter { return d2.New(d2.WithCycles()) }},
+	"plantuml": {"puml", func() exporter { return plantuml.New(plantuml.WithCycles()) }},
+}
+
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: showcase <output dir>")
+	names := slices.Sorted(maps.Keys(formats))
+	formatName := flag.String("format", "dot", "export format: "+strings.Join(names, ", "))
+	flag.Parse()
+	if flag.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: showcase [-format name] <output dir>")
 		os.Exit(2)
 	}
-	if err := run(os.Args[1]); err != nil {
+	f, ok := formats[*formatName]
+	if !ok {
+		fmt.Fprintf(os.Stderr, "showcase: unknown format %q (want one of %s)\n", *formatName, strings.Join(names, ", "))
+		os.Exit(2)
+	}
+	if err := run(f, flag.Arg(0)); err != nil {
 		fmt.Fprintln(os.Stderr, "showcase:", err)
 		os.Exit(1)
 	}
 }
 
-func run(dir string) error {
-	graphviz := dot.New(dot.WithCycles())
-	fm, err := buildMesh(graphviz)
+func run(f format, dir string) error {
+	plugin := f.plugin()
+	fm, err := buildMesh(plugin)
 	if err != nil {
 		return err
 	}
@@ -42,18 +78,18 @@ func run(dir string) error {
 		return fmt.Errorf("run: %w", err)
 	}
 
-	static, err := graphviz.Export()
+	static, err := plugin.Export()
 	if err != nil {
 		return err
 	}
-	cycles, err := graphviz.ExportCycles()
+	cycles, err := plugin.ExportCycles()
 	if err != nil {
 		return err
 	}
 
 	// The output dir is the caller's own argument; os.Root keeps every file
 	// inside it.
-	if err = os.MkdirAll(dir, 0o750); err != nil { //nolint:gosec // operator-chosen output dir
+	if err = os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 	root, err := os.OpenRoot(dir)
@@ -62,15 +98,15 @@ func run(dir string) error {
 	}
 	defer func() { _ = root.Close() }()
 
-	if err = root.WriteFile("static.dot", static, 0o600); err != nil {
+	if err = root.WriteFile("static."+f.ext, static, 0o600); err != nil {
 		return err
 	}
 	for i, graph := range cycles {
-		if err = root.WriteFile(fmt.Sprintf("cycle-%03d.dot", i+1), graph, 0o600); err != nil {
+		if err = root.WriteFile(fmt.Sprintf("cycle-%03d.%s", i+1, f.ext), graph, 0o600); err != nil {
 			return err
 		}
 	}
-	fmt.Printf("wrote static.dot and %d cycle graphs to %s\n", len(cycles), dir)
+	fmt.Printf("wrote static.%s and %d cycle graphs to %s\n", f.ext, len(cycles), dir)
 	return nil
 }
 
@@ -95,7 +131,7 @@ func forward(fn func(amount float64) float64, outputs ...string) component.Activ
 
 func same(amount float64) float64 { return amount }
 
-func buildMesh(graphviz *dot.Plugin) (*fmesh.FMesh, error) {
+func buildMesh(plugin fmesh.Plugin) (*fmesh.FMesh, error) {
 	var components []*component.Component
 	add := func(name, description string, opts ...component.Option) {
 		c, err := component.New(name, append(opts, component.WithDescription(description))...)
@@ -167,7 +203,7 @@ func buildMesh(graphviz *dot.Plugin) (*fmesh.FMesh, error) {
 	fm, err := fmesh.New("order-processing",
 		fmesh.WithDescription("Order processing: fan-out, fan-in, an error and a wait"),
 		fmesh.WithErrorHandlingStrategy(fmesh.IgnoreAll),
-		fmesh.WithPlugins(graphviz))
+		fmesh.WithPlugins(plugin))
 	if err != nil {
 		return nil, err
 	}

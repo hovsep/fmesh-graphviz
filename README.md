@@ -1,115 +1,65 @@
-# fmesh-graphviz
+# fmesh-export
 
-Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as a [Graphviz DOT](https://graphviz.org/doc/info/lang.html) graph.
+Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as a diagram. One Go module, one package
+per format:
 
-- **Static graph:** components, ports, pipes and descriptions.
-- **Per-cycle graphs:** one graph per cycle. Components are colored by their activation result,
-  and a legend shows the cycle stats. Put them together as an animation of the run.
-- **Configurable:** colors, shapes and layout.
+| Format | Package | Render with |
+|---|---|---|
+| [Graphviz DOT](https://graphviz.org) | [`dot`](dot) | `dot -Tpng`, [edotor.net](https://edotor.net) |
+| [Mermaid](https://mermaid.js.org) | [`mermaid`](mermaid) | GitHub markdown, [mermaid.live](https://mermaid.live) |
+| [D2](https://d2lang.com) | [`d2`](d2) | `d2`, [play.d2lang.com](https://play.d2lang.com) |
+| [PlantUML](https://plantuml.com) | [`plantuml`](plantuml) | `plantuml -tpng`, plantuml.com server |
 
-It is an fmesh plugin: attach it with `fmesh.WithPlugins`. See the
-[dot package docs](https://pkg.go.dev/github.com/hovsep/fmesh-graphviz/dot) for the API.
+JSON export is bundled with fmesh itself: [`plugin/jsonexport`](https://github.com/hovsep/fmesh/tree/main/plugin/jsonexport).
 
-## Live example
-
-After every merge, CI renders the showcase mesh in
-[`internal/cmd/showcase`](internal/cmd/showcase/main.go) (fan-out, fan-in, an error and a wait) and
-shows the pictures on the run's summary page. The latest ones:
-
-![Showcase mesh](https://raw.githubusercontent.com/hovsep/fmesh-graphviz/ci-graphs/latest/static.png)
-
-![Showcase run, one frame per cycle](https://raw.githubusercontent.com/hovsep/fmesh-graphviz/ci-graphs/latest/cycles.gif)
-
-Run it locally: `go run ./internal/cmd/showcase out`, then render the `.dot` files with `dot -Tpng`.
-
-## Static graph
-
-```go
-import "github.com/hovsep/fmesh-graphviz/dot"
-
-graphviz := dot.New()
-fm, err := fmesh.New("mesh", fmesh.WithPlugins(graphviz))
-if err != nil {
-    return err
-}
-// ... add components and pipes ...
-
-graph, err := graphviz.Export() // DOT source; nil for an empty mesh
-if err != nil {
-    return err
-}
-if err := os.WriteFile("mesh.dot", graph, 0o644); err != nil {
-    return err
-}
-```
-
-For a mesh that is already built without the plugin, call the package function: `dot.Export(fm)`
-(it takes the same options).
-
-View it on [edotor.net](https://edotor.net), or render it with Graphviz:
+## Install
 
 ```bash
-dot -Tsvg mesh.dot -o mesh.svg
+go get github.com/hovsep/fmesh-export
 ```
 
-<img src="https://github.com/user-attachments/assets/b27bd458-c03d-4cc6-bea3-542f0e839697" width="500px">
+## Usage
 
-## Per-cycle graphs
-
-Create the plugin with `WithCycles`. It records every cycle of the latest run, so it works even with
-`fmesh.WithCyclesHistoryLimit`.
+Every format has the same shape. Each exporter is an fmesh plugin:
 
 ```go
-graphviz := dot.New(dot.WithCycles())
-fm, err := fmesh.New("mesh", fmesh.WithPlugins(graphviz))
+import "github.com/hovsep/fmesh-export/mermaid"
+
+chart := mermaid.New(mermaid.WithCycles())
+fm, err := fmesh.New("mesh", fmesh.WithPlugins(chart))
 if err != nil {
     return err
 }
-// ... build and seed the mesh ...
+// ... add components and pipes, seed, fm.Run(ctx) ...
 
-if _, err := fm.Run(ctx); err != nil {
-    return err
-}
-graphs, err := graphviz.ExportCycles() // one graph per cycle, in order
-if err != nil {
-    return err
-}
-for i, graph := range graphs {
-    if err := os.WriteFile(fmt.Sprintf("cycle-%03d.dot", i+1), graph, 0o644); err != nil {
-        return err
-    }
-}
+static, err := chart.Export()       // the structure
+cycles, err := chart.ExportCycles() // one diagram per cycle, colored by activation result
 ```
 
-Each legend counts the components in every activation state (OK, No input, error, panic, hook failed,
-waiting). Colors: green = OK, yellow = no input, red = error, pink = panic, orange = hook failed,
-blue / purple = waiting (dropping / keeping inputs).
+- `New(opts...)` creates the plugin; attach it with `fmesh.WithPlugins`. One plugin serves one mesh.
+- `Export()` returns the structure: components, ports, pipes, descriptions.
+- `WithCycles()` records every cycle of the next run; `ExportCycles()` then returns one diagram per
+  cycle, with components colored by their activation result.
+- `<pkg>.Export(fm, opts...)` exports a mesh that was built without the plugin.
+- Options set one thing on top of the defaults; anything you do not set keeps its default. See
+  each package's README.
 
-Make an animation (needs ImageMagick):
+## Live examples
 
-```bash
-for f in cycle-*.dot; do dot -Tpng "$f" -o "${f%.dot}.png"; done
-convert -delay 100 -loop 0 cycle-*.png mesh.gif
-```
+After every merge, CI renders the showcase mesh in [`internal/cmd/showcase`](internal/cmd/showcase/main.go)
+(fan-out, fan-in, an error and a wait) in every format, and shows the pictures on the run's summary
+page. One workflow per format: [DOT](.github/workflows/dot.yml), [Mermaid](.github/workflows/mermaid.yml),
+[D2](.github/workflows/d2.yml), [PlantUML](.github/workflows/plantuml.yml).
 
-![](https://github.com/user-attachments/assets/3ac501e7-b62f-4fd6-9908-be399a6ca464)
+| Format | Structure | Run replay |
+|---|---|---|
+| DOT | ![DOT structure](https://raw.githubusercontent.com/hovsep/fmesh-export/ci-graphs/latest/dot/static.png) | ![DOT cycles](https://raw.githubusercontent.com/hovsep/fmesh-export/ci-graphs/latest/dot/cycles.gif) |
+| Mermaid | ![Mermaid structure](https://raw.githubusercontent.com/hovsep/fmesh-export/ci-graphs/latest/mermaid/static.png) | ![Mermaid cycles](https://raw.githubusercontent.com/hovsep/fmesh-export/ci-graphs/latest/mermaid/cycles.gif) |
+| D2 | ![D2 structure](https://raw.githubusercontent.com/hovsep/fmesh-export/ci-graphs/latest/d2/static.png) | ![D2 cycles](https://raw.githubusercontent.com/hovsep/fmesh-export/ci-graphs/latest/d2/cycles.gif) |
+| PlantUML | ![PlantUML structure](https://raw.githubusercontent.com/hovsep/fmesh-export/ci-graphs/latest/plantuml/static.png) | ![PlantUML cycles](https://raw.githubusercontent.com/hovsep/fmesh-export/ci-graphs/latest/plantuml/cycles.gif) |
 
-## Configuration
+Run it locally: `go run ./internal/cmd/showcase -format d2 out`.
 
-Each option sets attributes on top of the defaults; anything it does not name keeps its default.
+## License
 
-```go
-graphviz := dot.New(
-    dot.WithAttrs(dot.Graph, map[string]string{"layout": "neato"}), // dot, neato, fdp, circo, ...
-    dot.WithAttrs(dot.ComponentNode, map[string]string{"color": "#ffcc00"}),
-    dot.WithResultAttrs(component.ActivationCodeOK, map[string]string{"color": "darkgreen"}),
-    dot.WithComponentLabel("fn"),
-)
-```
-
-| Option | Styles |
-|---|---|
-| `WithAttrs(element, attrs)` | one element: `Graph`, `Component`, `ComponentNodes`, `ComponentNode`, `ErrorNode`, `Port`, `Pipe`, `Legend`, `LegendNode` |
-| `WithResultAttrs(code, attrs)` | a component's cluster in a cycle graph, by activation result |
-| `WithComponentLabel(label)` | the node of a component with no description (default `𝑓`) |
-| `WithCycles()` | records every cycle for `ExportCycles` |
+See [LICENSE](LICENSE).
