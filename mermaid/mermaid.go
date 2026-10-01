@@ -80,10 +80,8 @@ func (p *Plugin) Name() string { return "mermaid" }
 
 // Init attaches the plugin to the mesh and, with WithCycles, starts recording.
 func (p *Plugin) Init(fm *fmesh.FMesh) error {
-	switch p.direction {
-	case "LR", "RL", "TB", "BT":
-	default:
-		return fmt.Errorf("mermaid: unknown direction %q", p.direction)
+	if err := p.validate(); err != nil {
+		return err
 	}
 	if p.fm == fm {
 		return nil // already attached: the hooks are registered once
@@ -116,8 +114,21 @@ func (p *Plugin) Init(fm *fmesh.FMesh) error {
 // plugin. opts style it as they would the plugin; WithCycles has no effect.
 func Export(fm *fmesh.FMesh, opts ...Option) ([]byte, error) {
 	p := New(opts...)
+	if err := p.validate(); err != nil {
+		return nil, err
+	}
 	p.fm = fm
 	return p.Export()
+}
+
+// validate rejects options that would produce an invalid chart.
+func (p *Plugin) validate() error {
+	switch p.direction {
+	case "LR", "RL", "TB", "BT":
+		return nil
+	default:
+		return fmt.Errorf("mermaid: unknown direction %q", p.direction)
+	}
 }
 
 // Export returns the mesh structure as Mermaid flowchart source.
