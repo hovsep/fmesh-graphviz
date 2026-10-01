@@ -111,7 +111,7 @@ const legendHTML = `
 			</tr>
 			{{ end }}
 		
-			{{ if .cycleNumber }}
+			{{ if .hasCycle }}
 			<tr>
 				<td>Cycle:</td><td>{{ .cycleNumber }}</td>
 			</tr>
