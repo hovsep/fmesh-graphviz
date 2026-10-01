@@ -44,7 +44,8 @@ type (
 	Result = doc.Result
 )
 
-// Export returns the mesh structure as YAML, shaped as Mesh.
+// Export returns the mesh structure as YAML, shaped as Mesh. A nil mesh is
+// export.ErrNilMesh.
 func (e *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
 	mesh, err := doc.Structure(fm)
 	if err != nil {
@@ -54,7 +55,7 @@ func (e *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
 }
 
 // ExportCycle returns the structure and the results of c as YAML, shaped as
-// Cycle. A nil cycle is export.ErrNilCycle.
+// Cycle. A nil mesh is export.ErrNilMesh, and a nil cycle export.ErrNilCycle.
 func (e *Exporter) ExportCycle(fm *fmesh.FMesh, c *cycle.Cycle) ([]byte, error) {
 	cyc, err := doc.CycleOf(fm, c)
 	if err != nil {

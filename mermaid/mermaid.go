@@ -88,6 +88,9 @@ func (e *Exporter) validate() error {
 }
 
 func (e *Exporter) render(fm *fmesh.FMesh, activationCycle *cycle.Cycle) ([]byte, error) {
+	if fm == nil {
+		return nil, export.ErrNilMesh
+	}
 	if err := e.validate(); err != nil {
 		return nil, err
 	}

@@ -98,6 +98,11 @@ func TestExporter_Export(t *testing.T) {
 		assert.Equal(t, "name: empty\ncomponents: []\npipes: []\n", string(got))
 	})
 
+	t.Run("a nil mesh is an error", func(t *testing.T) {
+		_, err := New().Export(nil)
+		require.ErrorIs(t, err, export.ErrNilMesh)
+	})
+
 	t.Run("deterministic", func(t *testing.T) {
 		a, err := New().Export(pricingMesh(t, noop))
 		require.NoError(t, err)
@@ -185,6 +190,11 @@ func TestExporter_ExportCycle(t *testing.T) {
 	t.Run("a nil cycle is an error", func(t *testing.T) {
 		_, err := New().ExportCycle(fm, nil)
 		require.ErrorIs(t, err, export.ErrNilCycle)
+	})
+
+	t.Run("a nil mesh is an error", func(t *testing.T) {
+		_, err := New().ExportCycle(nil, ri.Cycles.Last())
+		require.ErrorIs(t, err, export.ErrNilMesh)
 	})
 
 	t.Run("works from an AfterCycle hook", func(t *testing.T) {

@@ -65,8 +65,11 @@ type Result struct {
 	Errors    []string `json:"errors,omitempty" yaml:"errors,omitempty"`
 }
 
-// Structure walks fm into a Mesh.
+// Structure walks fm into a Mesh. A nil mesh is export.ErrNilMesh.
 func Structure(fm *fmesh.FMesh) (Mesh, error) {
+	if fm == nil {
+		return Mesh{}, export.ErrNilMesh
+	}
 	b := &builder{}
 	if err := fm.Walk(b); err != nil {
 		return Mesh{}, err
@@ -74,8 +77,8 @@ func Structure(fm *fmesh.FMesh) (Mesh, error) {
 	return b.mesh, nil
 }
 
-// CycleOf returns the structure of fm with the results of c. A nil cycle is
-// export.ErrNilCycle.
+// CycleOf returns the structure of fm with the results of c. A nil mesh is
+// export.ErrNilMesh, and a nil cycle export.ErrNilCycle.
 func CycleOf(fm *fmesh.FMesh, c *cycle.Cycle) (Cycle, error) {
 	if c == nil {
 		return Cycle{}, export.ErrNilCycle

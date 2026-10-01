@@ -59,7 +59,7 @@ per component, in name order:
 ```
 
 - A component with no result in the cycle had no input: its code is `No input`.
-- A nil cycle returns `export.ErrNilCycle`.
+- A nil mesh returns `export.ErrNilMesh`, and a nil cycle `export.ErrNilCycle`.
 - To export each cycle while the mesh runs, call `ExportCycle` from an `AfterCycle` hook.
 
 If you also import the standard library's `encoding/json` in the same file, give one of them an

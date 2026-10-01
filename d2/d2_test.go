@@ -240,3 +240,10 @@ func TestExporter_ExportCycleRejectsNilCycle(t *testing.T) {
 	_, err := New().ExportCycle(oneMesh(t), nil)
 	require.ErrorIs(t, err, export.ErrNilCycle)
 }
+
+func TestExporter_RejectsNilMesh(t *testing.T) {
+	_, err := New().Export(nil)
+	require.ErrorIs(t, err, export.ErrNilMesh)
+	_, err = New().ExportCycle(nil, cycle.New())
+	require.ErrorIs(t, err, export.ErrNilMesh)
+}

@@ -71,6 +71,9 @@ func (e *Exporter) ExportCycle(fm *fmesh.FMesh, c *cycle.Cycle) ([]byte, error) 
 
 // render draws the mesh, optionally in the state of one cycle.
 func (e *Exporter) render(fm *fmesh.FMesh, activationCycle *cycle.Cycle) ([]byte, error) {
+	if fm == nil {
+		return nil, export.ErrNilMesh
+	}
 	if fm.Components().IsEmpty() {
 		return nil, nil
 	}
