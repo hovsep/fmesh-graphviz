@@ -10,6 +10,18 @@ Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as a [Graphviz DOT](htt
 It is an fmesh plugin: attach it with `fmesh.WithPlugins`. See the
 [dot package docs](https://pkg.go.dev/github.com/hovsep/fmesh-graphviz/dot) for the API.
 
+## Live example
+
+After every merge, CI renders the showcase mesh in
+[`internal/cmd/showcase`](internal/cmd/showcase/main.go) (fan-out, fan-in, an error and a wait) and
+shows the pictures on the run's summary page. The latest ones:
+
+![Showcase mesh](https://raw.githubusercontent.com/hovsep/fmesh-graphviz/ci-graphs/latest/static.png)
+
+![Showcase run, one frame per cycle](https://raw.githubusercontent.com/hovsep/fmesh-graphviz/ci-graphs/latest/cycles.gif)
+
+Run it locally: `go run ./internal/cmd/showcase out`, then render the `.dot` files with `dot -Tpng`.
+
 ## Static graph
 
 ```go
