@@ -80,7 +80,7 @@ jobs:
               dot)      dot -Tpng -Gdpi=96 "$src" -o "$png" ;;
               plantuml) java -jar "$RUNNER_TEMP/plantuml.jar" -tpng "$src" ;;
               d2)       d2 --layout elk --scale 0.6 --pad 20 "$src" "$png" ;;
-              mermaid)  mmdc -q -w 2000 -s 2 -p "$RUNNER_TEMP/puppeteer.json" -b white -i "$src" -o "$png" ;;
+              mermaid)  mmdc -q -s 4 -p "$RUNNER_TEMP/puppeteer.json" -b white -i "$src" -o "$png" ;;
             esac
           done
           convert -delay 120 -loop 0 cycle-*.png cycles.gif
