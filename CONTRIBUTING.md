@@ -18,8 +18,11 @@ Thanks for helping. Small, focused pull requests are easiest to review.
 
 ## Rules
 
-- **Same API in every format.** A change to the plugin shape (options, `Export`, `ExportCycles`,
-  `Init` rules) goes into all formats in the same pull request.
+- **Same API in every format.** Every format implements fmesh's `export.Exporter`. A change to
+  the shared shape (`New`, options, `Export`, `ExportCycle`) goes into all formats in the same
+  pull request.
+- **No state.** An `Exporter` holds only its options, so it can be reused and called from an
+  `AfterCycle` hook.
 - **Deterministic output.** Equal meshes must export byte-identical files, so tests can compare
   exact strings.
 - **Never change the mesh.** Exporters only read it, through `fmesh.Walk`.

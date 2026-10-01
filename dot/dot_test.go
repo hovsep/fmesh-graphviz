@@ -2,12 +2,12 @@ package dot
 
 import (
 	"context"
-	"errors"
 	"regexp"
 	"testing"
 
 	"github.com/hovsep/fmesh"
 	"github.com/hovsep/fmesh/component"
+	"github.com/hovsep/fmesh/cycle"
 	"github.com/hovsep/fmesh/port"
 	"github.com/hovsep/fmesh/signal"
 	"github.com/stretchr/testify/assert"
@@ -28,8 +28,8 @@ func mustNewComponent(t *testing.T, name string, opts ...component.Option) *comp
 	return c
 }
 
-// calcMesh builds adder -> multiplier with the plugin attached and seeds the adder.
-func calcMesh(t *testing.T, plugin *Plugin, opts ...fmesh.Option) *fmesh.FMesh {
+// calcMesh builds adder -> multiplier and seeds the adder.
+func calcMesh(t *testing.T) *fmesh.FMesh {
 	t.Helper()
 	adder := mustNewComponent(t, "adder",
 		component.WithDescription("adds 2 numbers"),
@@ -59,28 +59,51 @@ func calcMesh(t *testing.T, plugin *Plugin, opts ...fmesh.Option) *fmesh.FMesh {
 		}))
 	require.NoError(t, adder.OutputByName("result").PipeTo(multiplier.InputByName("num")))
 
-	fm := mustNewFMesh(t, "fm", append(opts, fmesh.WithDescription("calculator"), fmesh.WithPlugins(plugin))...)
+	fm := mustNewFMesh(t, "fm", fmesh.WithDescription("calculator"))
 	require.NoError(t, fm.AddComponents(multiplier, adder))
 	require.NoError(t, adder.InputByName("num1").PutSignals(signal.New(15)))
 	require.NoError(t, adder.InputByName("num2").PutSignals(signal.New(12)))
 	return fm
 }
 
-func TestPlugin_Export(t *testing.T) {
-	t.Run("empty mesh exports nothing", func(t *testing.T) {
-		plugin := New()
-		mustNewFMesh(t, "fm", fmesh.WithPlugins(plugin))
+// oneMesh builds a mesh with one component and no pipes.
+func oneMesh(t *testing.T) *fmesh.FMesh {
+	t.Helper()
+	fm := mustNewFMesh(t, "one")
+	require.NoError(t, fm.AddComponents(mustNewComponent(t, "c",
+		component.WithInputs("in"),
+		component.WithActivationFunc(func(context.Context, *component.Component) error { return nil }))))
+	return fm
+}
 
-		got, err := plugin.Export()
+// runAndExportCycles runs fm and exports every cycle of the run, in order.
+func runAndExportCycles(t *testing.T, e *Exporter, fm *fmesh.FMesh) []string {
+	t.Helper()
+	ri, err := fm.Run(t.Context())
+	require.NoError(t, err)
+	graphs := make([]string, 0, ri.Cycles.Len())
+	for _, c := range ri.Cycles.All() {
+		graph, err := e.ExportCycle(fm, c)
+		require.NoError(t, err)
+		graphs = append(graphs, string(graph))
+	}
+	return graphs
+}
+
+func TestExporter_Export(t *testing.T) {
+	t.Run("empty mesh exports nothing", func(t *testing.T) {
+		fm := mustNewFMesh(t, "fm")
+
+		got, err := New().Export(fm)
+		require.NoError(t, err)
+		assert.Empty(t, got)
+		got, err = New().ExportCycle(fm, cycle.New())
 		require.NoError(t, err)
 		assert.Empty(t, got)
 	})
 
 	t.Run("draws components, ports and pipes", func(t *testing.T) {
-		plugin := New()
-		calcMesh(t, plugin)
-
-		got, err := plugin.Export()
+		got, err := New().Export(calcMesh(t))
 		require.NoError(t, err)
 		graph := string(got)
 		assert.Contains(t, graph, "adds 2 numbers")
@@ -91,22 +114,17 @@ func TestPlugin_Export(t *testing.T) {
 
 	t.Run("output is stable", func(t *testing.T) {
 		// Two exports of equal meshes must be byte-identical.
-		first, second := New(), New()
-		calcMesh(t, first)
-		calcMesh(t, second)
-
-		a, err := first.Export()
+		a, err := New().Export(calcMesh(t))
 		require.NoError(t, err)
-		b, err := second.Export()
+		b, err := New().Export(calcMesh(t))
 		require.NoError(t, err)
 		assert.Equal(t, string(a), string(b))
 	})
 
 	t.Run("does not change the mesh", func(t *testing.T) {
-		plugin := New()
-		fm := calcMesh(t, plugin)
+		fm := calcMesh(t)
 
-		_, err := plugin.Export()
+		_, err := New().Export(fm)
 		require.NoError(t, err)
 		for _, c := range fm.Components().AllOrdered() {
 			for _, p := range append(c.Inputs().AllOrdered(), c.Outputs().AllOrdered()...) {
@@ -115,55 +133,32 @@ func TestPlugin_Export(t *testing.T) {
 		}
 	})
 
-	t.Run("not attached", func(t *testing.T) {
-		_, err := New().Export()
-		require.ErrorIs(t, err, ErrNotAttached)
+	t.Run("rejects a pipe out of the mesh", func(t *testing.T) {
+		fm := mustNewFMesh(t, "fm")
+		c := mustNewComponent(t, "c", component.WithOutputs("out"),
+			component.WithActivationFunc(func(context.Context, *component.Component) error { return nil }))
+		require.NoError(t, fm.AddComponents(c))
+		stray, err := port.NewInput("stray")
+		require.NoError(t, err)
+		require.NoError(t, c.OutputByName("out").PipeTo(stray))
+
+		_, err = New().Export(fm)
+		require.ErrorContains(t, err, "not in the mesh")
 	})
 }
 
-func TestPlugin_ExportCycles(t *testing.T) {
-	t.Run("one graph per cycle, with stats", func(t *testing.T) {
-		plugin := New(WithCycles())
-		fm := calcMesh(t, plugin)
-
-		ri, err := fm.Run(t.Context())
-		require.NoError(t, err)
-
-		graphs, err := plugin.ExportCycles()
-		require.NoError(t, err)
-		require.Len(t, graphs, ri.Cycles.Len())
-		assert.Contains(t, string(graphs[0]), "Hook failed")
-		// Cycle 1: only the adder has input; the multiplier counts as "No input".
-		assert.Regexp(t, `No input:</td><td>1<`, string(graphs[0]))
-	})
-
-	t.Run("a cycles history limit does not cut the replay", func(t *testing.T) {
-		plugin := New(WithCycles())
-		fm := calcMesh(t, plugin, fmesh.WithCyclesHistoryLimit(1))
-
-		_, err := fm.Run(t.Context())
-		require.NoError(t, err)
-
-		graphs, err := plugin.ExportCycles()
-		require.NoError(t, err)
-		assert.Len(t, graphs, 3)
-	})
-
-	t.Run("recording is opt-in", func(t *testing.T) {
-		plugin := New()
-		calcMesh(t, plugin)
-
-		_, err := plugin.ExportCycles()
-		require.ErrorIs(t, err, ErrCyclesNotRecorded)
-	})
+func TestExporter_ExportCycle(t *testing.T) {
+	graphs := runAndExportCycles(t, New(), calcMesh(t))
+	require.NotEmpty(t, graphs)
+	assert.Contains(t, graphs[0], "Hook failed")
+	// Cycle 1: only the adder has input; the multiplier counts as "No input".
+	assert.Regexp(t, `No input:</td><td>1<`, graphs[0])
+	assert.Regexp(t, `Cycle:</td><td>1<`, graphs[0])
 }
 
-func TestPlugin_Options(t *testing.T) {
+func TestExporter_Options(t *testing.T) {
 	t.Run("WithAttrs merges over the defaults", func(t *testing.T) {
-		plugin := New(WithAttrs(Pipe, map[string]string{attrColor: "blue"}))
-		calcMesh(t, plugin)
-
-		got, err := plugin.Export()
+		got, err := New(WithAttrs(Pipe, map[string]string{attrColor: "blue"})).Export(calcMesh(t))
 		require.NoError(t, err)
 		graph := string(got)
 		assert.Contains(t, graph, `color="blue"`)
@@ -172,112 +167,57 @@ func TestPlugin_Options(t *testing.T) {
 	})
 
 	t.Run("WithResultAttrs styles a cycle graph by result", func(t *testing.T) {
-		plugin := New(WithCycles(), WithResultAttrs(component.ActivationCodeOK, map[string]string{attrColor: "gold"}))
-		fm := calcMesh(t, plugin)
-		_, err := fm.Run(t.Context())
-		require.NoError(t, err)
-
-		graphs, err := plugin.ExportCycles()
-		require.NoError(t, err)
-		assert.Contains(t, string(graphs[0]), `color="gold"`)
+		e := New(WithResultAttrs(component.ActivationCodeOK, map[string]string{attrColor: "gold"}))
+		graphs := runAndExportCycles(t, e, calcMesh(t))
+		assert.Contains(t, graphs[0], `color="gold"`)
 	})
 
 	t.Run("WithComponentLabel labels components with no description", func(t *testing.T) {
-		plugin := New(WithComponentLabel("fn"))
-		fm := mustNewFMesh(t, "fm", fmesh.WithPlugins(plugin))
-		require.NoError(t, fm.AddComponents(mustNewComponent(t, "plain",
-			component.WithInputs("in"),
-			component.WithActivationFunc(func(context.Context, *component.Component) error { return nil }))))
-
-		got, err := plugin.Export()
+		got, err := New(WithComponentLabel("fn")).Export(oneMesh(t))
 		require.NoError(t, err)
 		assert.Contains(t, string(got), `label="fn"`)
 	})
 }
 
-func TestExport(t *testing.T) {
-	// The package function renders exactly what the plugin renders, options included.
-	plugin := New(WithAttrs(Pipe, map[string]string{attrColor: "navy"}))
-	fm := calcMesh(t, plugin)
+func TestExporter_Reuse(t *testing.T) {
+	// An exporter keeps no state between calls, so one value serves many meshes.
+	e := New(WithAttrs(Pipe, map[string]string{attrColor: "navy"}))
+	calc, other := calcMesh(t), oneMesh(t)
 
-	want, err := plugin.Export()
+	first, err := e.Export(calc)
 	require.NoError(t, err)
-	got, err := Export(fm, WithAttrs(Pipe, map[string]string{attrColor: "navy"}))
+	fromOther, err := e.Export(other)
 	require.NoError(t, err)
-	assert.Equal(t, string(want), string(got))
+	again, err := e.Export(calc)
+	require.NoError(t, err)
+	fresh, err := New(WithAttrs(Pipe, map[string]string{attrColor: "navy"})).Export(other)
+	require.NoError(t, err)
+
+	assert.Equal(t, string(first), string(again))
+	assert.Equal(t, string(fresh), string(fromOther))
+	assert.Contains(t, string(first), `color="navy"`, "options apply to every export")
 }
 
-func TestPlugin_Init(t *testing.T) {
-	plugin := New()
-	mustNewFMesh(t, "first", fmesh.WithPlugins(plugin))
-
-	_, err := fmesh.New("second", fmesh.WithPlugins(plugin))
-	require.ErrorContains(t, err, "already attached")
-}
-
-func TestPlugin_ExportRejectsPipeOutOfMesh(t *testing.T) {
-	plugin := New()
-	fm := mustNewFMesh(t, "fm", fmesh.WithPlugins(plugin))
-	c := mustNewComponent(t, "c", component.WithOutputs("out"),
-		component.WithActivationFunc(func(context.Context, *component.Component) error { return nil }))
-	require.NoError(t, fm.AddComponents(c))
-	stray, err := port.NewInput("stray")
-	require.NoError(t, err)
-	require.NoError(t, c.OutputByName("out").PipeTo(stray))
-
-	_, err = plugin.Export()
-	require.ErrorContains(t, err, "not in the mesh")
-}
-
-// failingAfterCycle is a plugin whose AfterCycle hook fails. Plugins initialize
-// in name order and its name sorts first, so its hook runs before any the
-// exporter registers.
-type failingAfterCycle struct{}
-
-func (failingAfterCycle) Name() string { return "0-failing-after-cycle" }
-
-func (failingAfterCycle) Init(fm *fmesh.FMesh) error {
+func TestExporter_ExportCycleFromHook(t *testing.T) {
+	// Streaming: one graph per cycle while the mesh runs, equal to exporting
+	// the recorded cycles afterwards.
+	e := New()
+	fm := calcMesh(t)
+	var frames []string
 	fm.SetupHooks(func(h *fmesh.Hooks) {
-		h.AfterCycle(func(context.Context, *fmesh.CycleContext) error {
-			return errors.New("after cycle failed")
+		h.AfterCycle(func(_ context.Context, cc *fmesh.CycleContext) error {
+			graph, err := e.ExportCycle(cc.FMesh, cc.Cycle)
+			frames = append(frames, string(graph))
+			return err
 		})
 	})
-	return nil
-}
 
-// oneComponentMesh builds a seeded single-component mesh with the given plugins.
-func oneComponentMesh(t *testing.T, plugins ...fmesh.Plugin) *fmesh.FMesh {
-	t.Helper()
-	fm := mustNewFMesh(t, "one", fmesh.WithPlugins(plugins...))
-	c := mustNewComponent(t, "c",
-		component.WithInputs("in"),
-		component.WithActivationFunc(func(context.Context, *component.Component) error { return nil }))
-	require.NoError(t, fm.AddComponents(c))
-	require.NoError(t, c.InputByName("in").PutSignals(signal.New(1)))
-	return fm
-}
-
-func TestPlugin_RecordsEveryCycleOnce(t *testing.T) {
-	t.Run("a second Init with the same mesh registers nothing", func(t *testing.T) {
-		plugin := New(WithCycles())
-		fm := oneComponentMesh(t, plugin)
-		require.NoError(t, plugin.Init(fm))
-
-		ri, err := fm.Run(t.Context())
+	ri, err := fm.Run(t.Context())
+	require.NoError(t, err)
+	require.Len(t, frames, ri.Cycles.Len())
+	for i, c := range ri.Cycles.All() {
+		want, err := e.ExportCycle(fm, c)
 		require.NoError(t, err)
-		graphs, err := plugin.ExportCycles()
-		require.NoError(t, err)
-		assert.Len(t, graphs, ri.Cycles.Len())
-	})
-
-	t.Run("another plugin's failing AfterCycle hook does not drop the cycle", func(t *testing.T) {
-		plugin := New(WithCycles())
-		fm := oneComponentMesh(t, failingAfterCycle{}, plugin)
-
-		ri, err := fm.Run(t.Context())
-		require.Error(t, err)
-		graphs, err := plugin.ExportCycles()
-		require.NoError(t, err)
-		assert.Len(t, graphs, ri.Cycles.Len())
-	})
+		assert.Equal(t, string(want), frames[i], "cycle %d", c.Number())
+	}
 }

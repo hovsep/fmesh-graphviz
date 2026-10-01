@@ -1,27 +1,20 @@
-// Package plantuml provides [Plugin], a mesh plugin that exports an fmesh mesh
-// as a PlantUML component diagram: the static structure, and optionally one
-// diagram per cycle with components colored by their activation result.
+// Package plantuml provides [Exporter], which exports an fmesh mesh as a
+// PlantUML component diagram: the structure, or the structure in the state of
+// one cycle with components colored by their activation result.
 package plantuml
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/hovsep/fmesh"
 	"github.com/hovsep/fmesh/component"
 	"github.com/hovsep/fmesh/cycle"
+	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/port"
 )
 
-var (
-	// ErrNotAttached is returned by an export before the plugin is attached to a mesh.
-	ErrNotAttached = errors.New("plantuml: plugin is not attached to a mesh")
-
-	// ErrCyclesNotRecorded is returned by ExportCycles when the plugin was created without WithCycles.
-	ErrCyclesNotRecorded = errors.New("plantuml: cycles are not recorded, create the plugin with WithCycles")
-)
+var _ export.Exporter = (*Exporter)(nil)
 
 // defaultColors returns a fresh copy of the default border colors of a
 // component in a cycle diagram, by activation result.
@@ -37,131 +30,66 @@ func defaultColors() map[component.ActivationResultCode]string {
 	}
 }
 
-// Plugin exports the mesh it is attached to as a PlantUML component diagram.
-// One instance serves one mesh.
-type Plugin struct {
-	direction    string
-	colors       map[component.ActivationResultCode]string
-	recordCycles bool
-	fm           *fmesh.FMesh
-	cycles       []*cycle.Cycle
+// Exporter exports a mesh as a PlantUML component diagram. It holds only its
+// options, so one value can export many meshes, also from an AfterCycle hook.
+type Exporter struct {
+	direction string
+	colors    map[component.ActivationResultCode]string
 }
 
-// Option configures a Plugin.
-type Option func(*Plugin)
+// Option configures an Exporter.
+type Option func(*Exporter)
 
 // WithDirection sets the layout direction: "left to right" (the default) or "top to bottom".
 func WithDirection(direction string) Option {
-	return func(p *Plugin) { p.direction = direction }
+	return func(e *Exporter) { e.direction = direction }
 }
 
 // WithResultColor sets the border color of a component in a cycle diagram when
 // its activation ended with code. color is a PlantUML color name ("teal") or a
 // hex code ("#00AA00"). Codes it does not name keep their default colors.
 func WithResultColor(code component.ActivationResultCode, color string) Option {
-	return func(p *Plugin) { p.colors[code] = color }
+	return func(e *Exporter) { e.colors[code] = color }
 }
 
-// WithCycles records every cycle of the latest run, for ExportCycles.
-func WithCycles() Option {
-	return func(p *Plugin) { p.recordCycles = true }
-}
-
-// New returns a plugin to attach with fmesh.WithPlugins.
-func New(opts ...Option) *Plugin {
-	p := &Plugin{direction: "left to right", colors: defaultColors()}
+// New returns an exporter with the given options. Export and ExportCycle
+// report an invalid option.
+func New(opts ...Option) *Exporter {
+	e := &Exporter{direction: "left to right", colors: defaultColors()}
 	for _, opt := range opts {
-		opt(p)
+		opt(e)
 	}
-	return p
-}
-
-// Name returns the plugin name.
-func (p *Plugin) Name() string { return "plantuml" }
-
-// Init attaches the plugin to the mesh and, with WithCycles, starts recording.
-func (p *Plugin) Init(fm *fmesh.FMesh) error {
-	if err := p.validate(); err != nil {
-		return err
-	}
-	if p.fm == fm {
-		return nil // already attached: the hooks are registered once
-	}
-	if p.fm != nil {
-		return errors.New("plantuml: plugin is already attached to another mesh")
-	}
-	p.fm = fm
-
-	if p.recordCycles {
-		fm.SetupHooks(func(h *fmesh.Hooks) {
-			h.BeforeRun(func(context.Context, *fmesh.FMesh) error {
-				p.cycles = nil
-				return nil
-			})
-			// Recorded here rather than read from RuntimeInfo, so a cycles history
-			// limit does not cut the replay short. BeforeCycle gets the same cycle
-			// the run then fills in, and unlike AfterCycle it cannot be skipped by
-			// another plugin's failing AfterCycle hook.
-			h.BeforeCycle(func(_ context.Context, cc *fmesh.CycleContext) error {
-				p.cycles = append(p.cycles, cc.Cycle)
-				return nil
-			})
-		})
-	}
-	return nil
-}
-
-func (p *Plugin) validate() error {
-	switch p.direction {
-	case "left to right", "top to bottom":
-		return nil
-	default:
-		return fmt.Errorf("plantuml: unknown direction %q", p.direction)
-	}
-}
-
-// Export returns fm's structure as PlantUML source, for a mesh built without the
-// plugin. opts style it as they would the plugin; WithCycles has no effect.
-func Export(fm *fmesh.FMesh, opts ...Option) ([]byte, error) {
-	p := New(opts...)
-	if err := p.validate(); err != nil {
-		return nil, err
-	}
-	p.fm = fm
-	return p.Export()
+	return e
 }
 
 // Export returns the mesh structure as PlantUML source.
-func (p *Plugin) Export() ([]byte, error) {
-	if p.fm == nil {
-		return nil, ErrNotAttached
-	}
-	return p.render(nil)
+func (e *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
+	return e.render(fm, nil)
 }
 
-// ExportCycles returns one diagram per cycle of the latest run, in order, with
-// components colored by their activation result.
-func (p *Plugin) ExportCycles() ([][]byte, error) {
-	if p.fm == nil {
-		return nil, ErrNotAttached
-	}
-	if !p.recordCycles {
-		return nil, ErrCyclesNotRecorded
-	}
-	diagrams := make([][]byte, 0, len(p.cycles))
-	for _, c := range p.cycles {
-		diagram, err := p.render(c)
-		if err != nil {
-			return nil, fmt.Errorf("cycle %d: %w", c.Number(), err)
-		}
-		diagrams = append(diagrams, diagram)
-	}
-	return diagrams, nil
+// ExportCycle returns the mesh as PlantUML source in the state of cycle c,
+// with components colored by their activation result. A component with no
+// result in c had no input.
+func (e *Exporter) ExportCycle(fm *fmesh.FMesh, c *cycle.Cycle) ([]byte, error) {
+	return e.render(fm, c)
 }
 
-func (p *Plugin) render(activationCycle *cycle.Cycle) ([]byte, error) {
-	b := &diagramBuilder{plugin: p, cycle: activationCycle, ports: make(map[*port.Port]string)}
-	if err := p.fm.Walk(b); err != nil {
+// validate rejects options that would produce an invalid diagram.
+func (e *Exporter) validate() error {
+	switch e.direction {
+	case "left to right", "top to bottom":
+		return nil
+	default:
+		return fmt.Errorf("plantuml: unknown direction %q", e.direction)
+	}
+}
+
+func (e *Exporter) render(fm *fmesh.FMesh, activationCycle *cycle.Cycle) ([]byte, error) {
+	if err := e.validate(); err != nil {
+		return nil, err
+	}
+	b := &diagramBuilder{exporter: e, cycle: activationCycle, ports: make(map[*port.Port]string)}
+	if err := fm.Walk(b); err != nil {
 		return nil, err
 	}
 	b.closeComponent()
@@ -172,8 +100,8 @@ func (p *Plugin) render(activationCycle *cycle.Cycle) ([]byte, error) {
 // diagramBuilder writes a diagram from a walk. Aliases are generated in walk
 // order, so they are stable and never depend on user-chosen names.
 type diagramBuilder struct {
-	plugin *Plugin
-	cycle  *cycle.Cycle
+	exporter *Exporter
+	cycle    *cycle.Cycle
 
 	out       strings.Builder
 	nodes     int
@@ -192,7 +120,7 @@ func (b *diagramBuilder) VisitMesh(fm *fmesh.FMesh) error {
 	if b.cycle != nil {
 		title = fmt.Sprintf("%s — cycle %d", title, b.cycle.Number())
 	}
-	fmt.Fprintf(&b.out, "@startuml\ntitle %s\n%s direction\n", escape(title), b.plugin.direction)
+	fmt.Fprintf(&b.out, "@startuml\ntitle %s\n%s direction\n", escape(title), b.exporter.direction)
 	if fm.Description() != "" {
 		fmt.Fprintf(&b.out, "' %s\n", oneLine(fm.Description()))
 	}
@@ -214,7 +142,7 @@ func (b *diagramBuilder) VisitComponent(c *component.Component) error {
 		if result != nil {
 			code = result.Code()
 		}
-		if color, ok := b.plugin.colors[code]; ok {
+		if color, ok := b.exporter.colors[code]; ok {
 			// PlantUML takes a hex line color without its leading "#".
 			style = fmt.Sprintf(" #line:%s;line.bold", strings.TrimPrefix(color, "#"))
 		}

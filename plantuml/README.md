@@ -9,7 +9,9 @@ component diagram.
 - The output is plain PlantUML source (`@startuml` … `@enduml`). Equal meshes give byte-identical
   output.
 
-It is an fmesh plugin: attach it with `fmesh.WithPlugins`.
+`New(opts...)` returns an `Exporter`. It implements fmesh's
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
+module and `export.JSON()` in fmesh. It holds only its options: reuse one value for many meshes.
 
 ## Install
 
@@ -22,14 +24,10 @@ go get github.com/hovsep/fmesh-export/plantuml
 ```go
 import "github.com/hovsep/fmesh-export/plantuml"
 
-diagram := plantuml.New()
-fm, err := fmesh.New("mesh", fmesh.WithPlugins(diagram))
-if err != nil {
-    return err
-}
-// ... add components and pipes ...
+e := plantuml.New()
+// ... build fm: add components and pipes ...
 
-src, err := diagram.Export() // PlantUML source
+src, err := e.Export(fm)
 if err != nil {
     return err
 }
@@ -38,23 +36,41 @@ if err := os.WriteFile("mesh.puml", src, 0o644); err != nil {
 }
 ```
 
-For a mesh that is already built without the plugin, call the package function:
-`plantuml.Export(fm)`. It takes the same options.
-
 ## Per-cycle diagrams
 
 ```go
-diagram := plantuml.New(plantuml.WithCycles())
-fm, err := fmesh.New("mesh", fmesh.WithPlugins(diagram))
+e := plantuml.New()
+// ... build and seed fm ...
+
+ri, err := fm.Run(ctx)
 if err != nil {
     return err
 }
-// ... build and seed the mesh ...
-
-if _, err := fm.Run(ctx); err != nil {
-    return err
+for i, c := range ri.Cycles.All() {
+    src, err := e.ExportCycle(fm, c) // one diagram for cycle c
+    if err != nil {
+        return err
+    }
+    if err := os.WriteFile(fmt.Sprintf("cycle-%03d.puml", i+1), src, 0o644); err != nil {
+        return err
+    }
 }
-diagrams, err := diagram.ExportCycles() // one diagram per cycle, in order
+```
+
+To export while the mesh runs, call `ExportCycle` from an `AfterCycle` hook. This also gets every
+cycle when `fmesh.WithCyclesHistoryLimit` drops old ones from `ri.Cycles`:
+
+```go
+fm.SetupHooks(func(h *fmesh.Hooks) {
+    h.AfterCycle(func(ctx context.Context, cc *fmesh.CycleContext) error {
+        src, err := e.ExportCycle(cc.FMesh, cc.Cycle)
+        if err != nil {
+            return err
+        }
+        // ... write or send src ...
+        return nil
+    })
+})
 ```
 
 - The title shows the cycle number.
@@ -67,8 +83,9 @@ diagrams, err := diagram.ExportCycles() // one diagram per cycle, in order
 | Option | Effect |
 |---|---|
 | `WithDirection("top to bottom")` | Layout direction: `"left to right"` (default) or `"top to bottom"` |
-| `WithCycles()` | Record every cycle of the latest run, for `ExportCycles` |
 | `WithResultColor(code, color)` | Border color for one activation result code: a name (`"teal"`) or hex (`"#00AA00"`) |
+
+`New` does not check the direction. `Export` and `ExportCycle` return an error for an unknown one.
 
 ## Render
 

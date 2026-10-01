@@ -10,7 +10,9 @@ per format:
 | [D2](https://d2lang.com) | [`d2`](d2) | `d2`, [play.d2lang.com](https://play.d2lang.com) |
 | [PlantUML](https://plantuml.com) | [`plantuml`](plantuml) | `plantuml -tpng`, plantuml.com server |
 
-JSON export is bundled with fmesh itself: [`plugin/jsonexport`](https://github.com/hovsep/fmesh/tree/main/plugin/jsonexport).
+Every exporter implements fmesh's
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export) interface. JSON export is
+part of fmesh itself: `export.JSON()`.
 
 ## Install
 
@@ -20,29 +22,77 @@ go get github.com/hovsep/fmesh-export/mermaid  # or /dot, /d2, /plantuml
 
 ## Usage
 
-Every format has the same shape. Each exporter is an fmesh plugin:
+Every format has the same shape:
 
 ```go
 import "github.com/hovsep/fmesh-export/mermaid"
 
-chart := mermaid.New(mermaid.WithCycles())
-fm, err := fmesh.New("mesh", fmesh.WithPlugins(chart))
+e := mermaid.New() // options go here, e.g. mermaid.WithDirection("TB")
+
+// ... build and seed fm ...
+
+static, err := e.Export(fm) // the structure
 if err != nil {
     return err
 }
-// ... add components and pipes, seed, fm.Run(ctx) ...
 
-static, err := chart.Export()       // the structure
-cycles, err := chart.ExportCycles() // one diagram per cycle, colored by activation result
+ri, err := fm.Run(ctx)
+if err != nil {
+    return err
+}
+for _, c := range ri.Cycles.All() {
+    frame, err := e.ExportCycle(fm, c) // the structure, colored by the results of cycle c
+    if err != nil {
+        return err
+    }
+    // ... write frame ...
+}
 ```
 
-- `New(opts...)` creates the plugin; attach it with `fmesh.WithPlugins`. One plugin serves one mesh.
-- `Export()` returns the structure: components, ports, pipes, descriptions.
-- `WithCycles()` records every cycle of the next run; `ExportCycles()` then returns one diagram per
-  cycle, with components colored by their activation result.
-- `<pkg>.Export(fm, opts...)` exports a mesh that was built without the plugin.
-- Options set one thing on top of the defaults; anything you do not set keeps its default. See
+- `New(opts...)` creates an exporter. It cannot fail.
+- `Export(fm)` returns the structure: components, ports, pipes, descriptions.
+- `ExportCycle(fm, c)` returns the structure in the state of one cycle. Components are colored by
+  their activation result. A component with no result in `c` had no input.
+- An invalid option (for example an unknown direction) is returned as an error by `Export` and
+  `ExportCycle`.
+- Options set one thing on top of the defaults. Anything you do not set keeps its default. See
   each package's README.
+- An exporter holds only its options. Reuse one value for many meshes.
+- An exporter never changes the mesh. Equal meshes give byte-identical output.
+
+### Streaming: one frame per cycle while the mesh runs
+
+`fmesh.WithCyclesHistoryLimit` keeps only the last cycles in `ri.Cycles`. To get every cycle, or to
+see frames while the mesh runs, export from an `AfterCycle` hook:
+
+```go
+e := mermaid.New()
+fm.SetupHooks(func(h *fmesh.Hooks) {
+    h.AfterCycle(func(ctx context.Context, cc *fmesh.CycleContext) error {
+        frame, err := e.ExportCycle(cc.FMesh, cc.Cycle)
+        if err != nil {
+            return err
+        }
+        // ... write or send frame ...
+        return nil
+    })
+})
+```
+
+### Any format through one interface
+
+Code that does not care about the format can take an `export.Exporter`:
+
+```go
+import "github.com/hovsep/fmesh/export"
+
+func save(e export.Exporter, fm *fmesh.FMesh) ([]byte, error) {
+    return e.Export(fm)
+}
+
+save(dot.New(), fm)
+save(export.JSON(), fm)
+```
 
 ## Live examples
 
@@ -66,31 +116,37 @@ Copy the [`d2`](d2) package: it is a complete exporter with the full set of test
 `xyz` needs:
 
 1. **A package** `xyz/` with `xyz.go`, `xyz_test.go` and a `README.md`.
-2. **The shared plugin API**, the same as every other format:
-   - `New(opts ...Option) *Plugin`, `Name() string`, `Init(*fmesh.FMesh) error`
-   - `Export() ([]byte, error)` and `ExportCycles() ([][]byte, error)`
-   - a package function `Export(fm *fmesh.FMesh, opts ...Option) ([]byte, error)`
-   - `WithCycles()`, plus single options that change one thing on top of the defaults. No config
-     struct that replaces everything.
+2. **The shared shape**, the same as every other format:
+   - `type Exporter struct{...}` that holds only the options.
+   - `type Option func(*Exporter)`, and single options that change one thing on top of the
+     defaults. No config struct that replaces everything.
+   - `func New(opts ...Option) *Exporter`. It cannot fail.
+   - `Export(fm *fmesh.FMesh) ([]byte, error)` for the structure.
+   - `ExportCycle(fm *fmesh.FMesh, c *cycle.Cycle) ([]byte, error)` for one cycle.
+   - `var _ export.Exporter = (*Exporter)(nil)`, so the compiler checks the interface.
 3. **Rendering through `fm.Walk(visitor)`.** Implement `VisitMesh`, `VisitComponent`, `VisitPort`
    and `VisitPipe`. Rules:
    - Never change the mesh.
+   - Keep no state in the `Exporter` between calls. Put per-export state in the visitor.
+   - Check the options in `Export` and `ExportCycle`, and return an error for a bad one.
    - The output must be byte-identical for equal meshes.
    - Use generated IDs (`c1`, `p2`, ...) and put names only in quoted, escaped labels.
    - In a cycle graph, a component with no result had no input (`ActivationCodeNoInput`).
-4. **The `Init` rules** that every exporter shares:
-   - Validate the options in `Init` **and** in the package `Export`.
-   - A second `Init` with the same mesh is a no-op; a different mesh is an error.
-   - With `WithCycles`, reset the record in `BeforeRun` and record in `BeforeCycle`. Not in
-     `AfterCycle`: another plugin's failing `AfterCycle` hook could skip it.
-5. **Tests:** one exact expected output, cycle colors with an error, determinism, awkward names
-   (quotes, dots, colons, newlines), option checks, both error values, a second `Init`, and a
-   failing `AfterCycle` hook from another plugin. The `d2` tests cover all of these.
-6. **The showcase:** add the format to `formats` in [`internal/cmd/showcase`](internal/cmd/showcase/main.go).
-7. **CI:** copy `.github/workflows/d2.yml` to `xyz.yml`, and add an `xyz)` case to the
+4. **Tests:**
+   - one exact expected output for `Export`;
+   - cycle colors and an error text for `ExportCycle`;
+   - determinism;
+   - awkward names (quotes, dots, colons, newlines);
+   - each option, and option checks in both `Export` and `ExportCycle`;
+   - one `Exporter` reused for two meshes;
+   - `ExportCycle` from an `AfterCycle` hook gives one frame per cycle.
+
+   The `d2` tests cover all of these.
+5. **The showcase:** add the format to `formats` in [`internal/cmd/showcase`](internal/cmd/showcase/main.go).
+6. **CI:** copy `.github/workflows/d2.yml` to `xyz.yml`, and add an `xyz)` case to the
    "Install renderer" and "Render images" steps of `render.yml`. Pin the renderer version and check
    its SHA-256 there.
-8. **Docs:** add a row to the format table and the live-example table above.
+7. **Docs:** add a row to the format table and the live-example table above.
 
 Run `make check` before you open a pull request. The PR's checks upload the rendered images as an
 artifact, so you can look at your format before it is merged.
