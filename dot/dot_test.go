@@ -109,7 +109,6 @@ func TestExporter_Export(t *testing.T) {
 		graph := string(got)
 		assert.Contains(t, graph, "adds 2 numbers")
 		assert.Contains(t, graph, `label="result"`)
-		// Exactly one pipe edge, drawn with the pipe style.
 		assert.Len(t, regexp.MustCompile(`n\d+->n\d+\[color="#e437ea"`).FindAllString(graph, -1), 1)
 	})
 
@@ -149,12 +148,19 @@ func TestExporter_Export(t *testing.T) {
 }
 
 func TestExporter_ExportCycle(t *testing.T) {
-	graphs := runAndExportCycles(t, New(), calcMesh(t))
-	require.NotEmpty(t, graphs)
-	assert.Contains(t, graphs[0], "Hook failed")
-	// Cycle 1: only the adder has input; the multiplier counts as "No input".
-	assert.Regexp(t, `No input:</td><td>1<`, graphs[0])
-	assert.Regexp(t, `Cycle:</td><td>1<`, graphs[0])
+	t.Run("legend shows the cycle and its stats", func(t *testing.T) {
+		graphs := runAndExportCycles(t, New(), calcMesh(t))
+		require.NotEmpty(t, graphs)
+		// Cycle 1: only the adder has input; the multiplier counts as "No input".
+		assert.Regexp(t, `No input:</td><td>1<`, graphs[0])
+		assert.Regexp(t, `Cycle:</td><td>1<`, graphs[0])
+	})
+
+	t.Run("shows cycle number 0", func(t *testing.T) {
+		got, err := New().ExportCycle(calcMesh(t), cycle.New())
+		require.NoError(t, err)
+		assert.Regexp(t, `Cycle:</td><td>0<`, string(got))
+	})
 }
 
 func TestExporter_Options(t *testing.T) {

@@ -174,6 +174,7 @@ func (b *graphBuilder) addLegend(fm *fmesh.FMesh) error {
 		data["meshDescription"] = fm.Description()
 	}
 	if b.cycle != nil {
+		data["hasCycle"] = true // the number alone hides cycle 0
 		data["cycleNumber"] = b.cycle.Number()
 		data["stats"] = cycleStats(fm, b.cycle)
 	}
