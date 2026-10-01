@@ -1,6 +1,6 @@
 // Package export defines the interface every exporter in this module
-// implements. Each format is a subpackage: json, dot, mermaid, d2, plantuml.
-// Hold an Exporter to pick a format at run time, or to write your own.
+// implements; each format is a subpackage. Hold an Exporter to pick a format at
+// run time, or to write your own.
 package export
 
 import (
