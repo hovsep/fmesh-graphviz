@@ -8,8 +8,8 @@ README with no extra tools.
 - **Per-cycle charts:** one chart per cycle, with components colored by activation result and
   errors shown next to the component.
 
-`New(opts...)` returns an `Exporter`. It implements fmesh's
-[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
+`New(opts...)` returns an `Exporter`. It implements this module's
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh-export), like every format in this
 module. It holds only its options: reuse one value for many meshes.
 
 ## Static chart

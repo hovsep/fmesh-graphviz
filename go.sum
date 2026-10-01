@@ -1,5 +1,7 @@
 github.com/emicklei/dot v1.9.2 h1:E/Wjz+BAH+JDhybEpISbo+QyDMNSiu/wqmIW9y922P8=
 github.com/emicklei/dot v1.9.2/go.mod h1:DeV7GvQtIw4h2u73RKBkkFdvVAz0D9fzeJrgPW6gy/s=
+github.com/hovsep/fmesh v1.15.0 h1:T/0II8BG68UusNGsepHmtyGapEQypM6dpzSthVb2zvw=
+github.com/hovsep/fmesh v1.15.0/go.mod h1:IeonBF8hlLAk0N/ksL1sAyNw3DvkJrWoBsexvcqA6xI=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 go.yaml.in/yaml/v3 v3.0.5 h1:N6y/pJk8buWs9NY5ERU2HSMfm+IuD/OtfdAnq6kESPw=

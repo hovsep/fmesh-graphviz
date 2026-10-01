@@ -9,8 +9,8 @@ component diagram.
 - The output is plain PlantUML source (`@startuml` … `@enduml`). Equal meshes give byte-identical
   output.
 
-`New(opts...)` returns an `Exporter`. It implements fmesh's
-[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
+`New(opts...)` returns an `Exporter`. It implements this module's
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh-export), like every format in this
 module. It holds only its options: reuse one value for many meshes.
 
 ## Install

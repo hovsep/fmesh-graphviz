@@ -4,8 +4,8 @@ Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as indented JSON: its s
 state in one cycle of a run. Use it to feed other tools, diff two versions of a mesh, or snapshot a
 mesh in a test.
 
-`New()` returns an `Exporter`. It implements fmesh's
-[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
+`New()` returns an `Exporter`. It implements this module's
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh-export), like every format in this
 module. It has no options and no state: reuse one value for many meshes.
 
 ## Install
