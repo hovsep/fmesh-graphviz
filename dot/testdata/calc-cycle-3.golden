@@ -1,0 +1,80 @@
+digraph  {
+	subgraph cluster_s1 {
+		fillcolor="#e2c6fc";style="dashed,filled";
+		n2[color="green",fontname="Courier New",label=<
+	<table border="0" cellborder="0" cellspacing="10">
+			
+			<tr>
+				<td>Description:</td><td>calculator</td>
+			</tr>
+			
+		
+			
+			<tr>
+				<td>Cycle:</td><td>3</td>
+			</tr>
+			
+
+			
+				
+				<tr>
+					<td>Activated:</td><td>0</td>
+				</tr>
+				
+				<tr>
+					<td>Success:</td><td>0</td>
+				</tr>
+				
+				<tr>
+					<td>No input:</td><td>2</td>
+				</tr>
+				
+				<tr>
+					<td>Finished with error:</td><td>0</td>
+				</tr>
+				
+				<tr>
+					<td>Finished with panic:</td><td>0</td>
+				</tr>
+				
+				<tr>
+					<td>Hook failed:</td><td>0</td>
+				</tr>
+				
+				<tr>
+					<td>Waiting for input (clear):</td><td>0</td>
+				</tr>
+				
+				<tr>
+					<td>Waiting for input (keep):</td><td>0</td>
+				</tr>
+				
+			
+	</table>
+	>,shape="plaintext"];
+		
+	}
+	subgraph cluster_s3 {
+		color="yellow";label="adder";margin="20";penwidth="5";style="rounded";
+		n5[fontname="Courier New",group="adder",height="1.0",label="num1",penwidth="2.5",shape="circle",style="filled",width="1.0"];
+		n6[fontname="Courier New",group="adder",height="1.0",label="num2",penwidth="2.5",shape="circle",style="filled",width="1.0"];
+		n7[fontname="Courier New",group="adder",height="1.0",label="result",penwidth="2.5",shape="circle",style="filled",width="1.0"];
+		n4[color="#9dddea",fontname="Courier New",group="adder",height="1.0",label="adds 2 numbers",penwidth="2.5",shape="rect",style="filled",width="1.0"];
+		n5->n4;
+		n6->n4;
+		n4->n7;
+		
+	}
+	subgraph cluster_s8 {
+		color="yellow";label="multiplier";margin="20";penwidth="5";style="rounded";
+		n10[fontname="Courier New",group="multiplier",height="1.0",label="num",penwidth="2.5",shape="circle",style="filled",width="1.0"];
+		n11[fontname="Courier New",group="multiplier",height="1.0",label="result",penwidth="2.5",shape="circle",style="filled",width="1.0"];
+		n9[color="#9dddea",fontname="Courier New",group="multiplier",height="1.0",label="multiplies by 3",penwidth="2.5",shape="rect",style="filled",width="1.0"];
+		n10->n9;
+		n9->n11;
+		
+	}
+	layout="dot";splines="ortho";
+	n7->n10[color="#e437ea",minlen="3",penwidth="2"];
+	
+}

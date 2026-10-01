@@ -70,6 +70,9 @@ func (e *Exporter) Export(fm *fmesh.FMesh) ([]byte, error) {
 // components colored by their activation result. A component with no result
 // in c had no input.
 func (e *Exporter) ExportCycle(fm *fmesh.FMesh, c *cycle.Cycle) ([]byte, error) {
+	if c == nil {
+		return nil, export.ErrNilCycle
+	}
 	return e.render(fm, c)
 }
 

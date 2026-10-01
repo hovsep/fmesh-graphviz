@@ -8,6 +8,7 @@ import (
 	"github.com/hovsep/fmesh"
 	"github.com/hovsep/fmesh/component"
 	"github.com/hovsep/fmesh/cycle"
+	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/signal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -211,4 +212,9 @@ func TestExporter_ExportCycleFromHook(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, string(want), frames[i], "cycle %d", c.Number())
 	}
+}
+
+func TestExporter_ExportCycleRejectsNilCycle(t *testing.T) {
+	_, err := New().ExportCycle(oneMesh(t), nil)
+	require.ErrorIs(t, err, export.ErrNilCycle)
 }

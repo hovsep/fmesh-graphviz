@@ -10,4 +10,4 @@ require (
 
 require go.yaml.in/yaml/v3 v3.0.5 // indirect
 
-replace github.com/hovsep/fmesh => /private/tmp/claude-502/-Users-ovsep-avakian-repos-fmesh/dbd72872-d9f5-4430-982e-cbbba9feaba6/scratchpad/wt/fm-export
+replace github.com/hovsep/fmesh => /private/tmp/claude-502/-Users-ovsep-avakian-repos-fmesh/c3609864-d69e-4a5e-8a7e-576fe6eab6e3/scratchpad/wt/fm-export
