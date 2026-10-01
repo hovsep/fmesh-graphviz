@@ -98,8 +98,8 @@ save(json.New(), fm)
 ## Live examples
 
 After every merge, CI renders the showcase mesh in [`internal/cmd/showcase`](internal/cmd/showcase/main.go)
-(fan-out, fan-in, an error and a wait) in every format, and shows the pictures on the run's summary
-page. One workflow per format: [DOT](.github/workflows/dot.yml), [Mermaid](.github/workflows/mermaid.yml),
+(fan-out, fan-in, an error and a wait) in every diagram format, and shows the pictures on the run's
+summary page. One workflow per format: [DOT](.github/workflows/dot.yml), [Mermaid](.github/workflows/mermaid.yml),
 [D2](.github/workflows/d2.yml), [PlantUML](.github/workflows/plantuml.yml).
 
 | Format | Structure | Run replay |

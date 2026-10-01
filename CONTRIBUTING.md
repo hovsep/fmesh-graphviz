@@ -5,7 +5,8 @@ Thanks for helping. Small, focused pull requests are easiest to review.
 ## Setup
 
 - Go 1.27 (see `go.mod`).
-- [golangci-lint](https://golangci-lint.run) for `make lint`.
+- [golangci-lint](https://golangci-lint.run) for `make lint`, built with Go 1.27 or newer: an older
+  build cannot load this module.
 - Optional, to look at the output: Graphviz (`dot`), PlantUML, D2 and mermaid-cli (`mmdc`).
 
 ## Workflow
@@ -25,7 +26,7 @@ Thanks for helping. Small, focused pull requests are easiest to review.
   `AfterCycle` hook.
 - **Deterministic output.** Equal meshes must export byte-identical files, so tests can compare
   exact strings.
-- **Never change the mesh.** Exporters only read it, through `fmesh.Walk`.
+- **Never change the mesh.** Exporters only read it, through `(*fmesh.FMesh).Walk`.
 - **Breaking changes** are allowed while fmesh is pre-production, but say so in the pull request
   title and description.
 - **Docs:** keep the READMEs short, in plain English, and in sync with the code.
