@@ -1,0 +1,39 @@
+name: CI
+
+# Tests, lint and formatting on every pull request and on main. The per-format
+# workflows only render the showcase; this one checks the code itself.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test and lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Check formatting
+        run: make fmt-check
+
+      - name: Run tests
+        run: make race
+
+      # Pinned so a new golangci-lint release cannot turn CI red without a repo
+      # change; keep in step with the version used locally and in fmesh.
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.13.1
