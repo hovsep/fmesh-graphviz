@@ -5,6 +5,7 @@ package mermaid
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/hovsep/fmesh"
@@ -121,7 +122,7 @@ func (b *chartBuilder) VisitMesh(fm *fmesh.FMesh) error {
 	if b.cycle != nil {
 		title = fmt.Sprintf("%s — cycle %d", title, b.cycle.Number())
 	}
-	fmt.Fprintf(&b.out, "---\ntitle: %s\n---\nflowchart %s\n", quote(title), b.exporter.direction)
+	fmt.Fprintf(&b.out, "---\ntitle: %s\n---\nflowchart %s\n", quoteTitle(title), b.exporter.direction)
 	if fm.Description() != "" {
 		fmt.Fprintf(&b.out, "  %%%% %s\n", oneLine(fm.Description()))
 	}
@@ -191,9 +192,19 @@ func (b *chartBuilder) closeSubgraph() {
 	}
 }
 
-// quote makes a Mermaid string label; a raw double quote would end it early.
+// labeler keeps a label literal: a raw quote ends it early, and "<" or ">"
+// can be read as HTML.
+var labeler = strings.NewReplacer(`"`, "#quot;", "<", "#lt;", ">", "#gt;")
+
+// quote makes a Mermaid string label; the result is one line.
 func quote(s string) string {
-	return `"` + strings.ReplaceAll(oneLine(s), `"`, "#quot;") + `"`
+	return `"` + labeler.Replace(oneLine(s)) + `"`
+}
+
+// quoteTitle makes a YAML double-quoted scalar for the front matter, where a
+// backslash starts an escape and Mermaid entities are not decoded.
+func quoteTitle(s string) string {
+	return strconv.Quote(oneLine(s))
 }
 
 func oneLine(s string) string {
