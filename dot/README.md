@@ -9,7 +9,7 @@ Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as a [Graphviz DOT](htt
 
 `New(opts...)` returns an `Exporter`. It implements fmesh's
 [`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
-module and `export.JSON()` in fmesh. It holds only its options: reuse one value for many meshes.
+module. It holds only its options: reuse one value for many meshes.
 See the [dot package docs](https://pkg.go.dev/github.com/hovsep/fmesh-export/dot) for the API.
 
 ## Static graph

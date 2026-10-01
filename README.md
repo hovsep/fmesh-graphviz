@@ -1,23 +1,24 @@
 # fmesh-export
 
-Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as a diagram. One Go module, one package
-per format:
+Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as data or as a diagram. One Go module,
+one package per format:
 
 | Format | Package | Render with |
 |---|---|---|
+| JSON | [`json`](json) | any JSON tool; unmarshal into `json.Mesh` / `json.Cycle` |
 | [Graphviz DOT](https://graphviz.org) | [`dot`](dot) | `dot -Tpng`, [edotor.net](https://edotor.net) |
 | [Mermaid](https://mermaid.js.org) | [`mermaid`](mermaid) | GitHub markdown, [mermaid.live](https://mermaid.live) |
 | [D2](https://d2lang.com) | [`d2`](d2) | `d2`, [play.d2lang.com](https://play.d2lang.com) |
 | [PlantUML](https://plantuml.com) | [`plantuml`](plantuml) | `plantuml -tpng`, plantuml.com server |
 
 Every exporter implements fmesh's
-[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export) interface. JSON export is
-part of fmesh itself: `export.JSON()`.
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export) interface, so one format can
+replace another.
 
 ## Install
 
 ```bash
-go get github.com/hovsep/fmesh-export/mermaid  # or /dot, /d2, /plantuml
+go get github.com/hovsep/fmesh-export/mermaid  # or /json, /dot, /d2, /plantuml
 ```
 
 ## Usage
@@ -91,7 +92,7 @@ func save(e export.Exporter, fm *fmesh.FMesh) ([]byte, error) {
 }
 
 save(dot.New(), fm)
-save(export.JSON(), fm)
+save(json.New(), fm)
 ```
 
 ## Live examples
