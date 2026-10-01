@@ -3,6 +3,7 @@ package mermaid
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hovsep/fmesh"
@@ -12,6 +13,7 @@ import (
 	"github.com/hovsep/fmesh/signal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.yaml.in/yaml/v3"
 )
 
 func mustNewFMesh(t *testing.T, name string, opts ...fmesh.Option) *fmesh.FMesh {
@@ -110,6 +112,45 @@ func TestExporter_Export(t *testing.T) {
 		second, err := New().Export(pairMesh(t, false))
 		require.NoError(t, err)
 		assert.Equal(t, string(first), string(second))
+	})
+
+	t.Run("escapes awkward names", func(t *testing.T) {
+		c := mustNewComponent(t, `my "comp": v1.2`,
+			component.WithDescription("line one\n<b>line</b> two"),
+			component.WithInputs("in put"),
+			component.WithOutputs(`a->b`),
+			component.WithActivationFunc(func(context.Context, *component.Component) error { return nil }))
+		fm := mustNewFMesh(t, `mesh <x> \n`, fmesh.WithDescription("a\nb"))
+		require.NoError(t, fm.AddComponents(c))
+
+		got, err := New().Export(fm)
+		require.NoError(t, err)
+		assert.Equal(t, `---
+title: "mesh <x> \\n"
+---
+flowchart LR
+  %% a b
+  subgraph s1["my #quot;comp#quot;: v1.2"]
+    c2["line one #lt;b#gt;line#lt;/b#gt; two"]
+    p3(("in put"))
+    p3 --> c2
+    p4(("a-#gt;b"))
+    c2 --> p4
+  end
+`, string(got))
+	})
+
+	t.Run("title is valid YAML", func(t *testing.T) {
+		for _, name := range []string{`a\q`, `C:\new`, `say "hi"`, "tab\there", "#quot; & é"} {
+			got, err := New().Export(mustNewFMesh(t, name))
+			require.NoError(t, err)
+
+			frontMatter, _, ok := strings.Cut(strings.TrimPrefix(string(got), "---\n"), "---\n")
+			require.True(t, ok, "front matter of %q", name)
+			var parsed struct{ Title string }
+			require.NoError(t, yaml.Unmarshal([]byte(frontMatter), &parsed), "front matter of %q", name)
+			assert.Equal(t, strings.Join(strings.Fields(name), " "), parsed.Title)
+		}
 	})
 }
 
