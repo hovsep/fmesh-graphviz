@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hovsep/fmesh"
+	"github.com/hovsep/fmesh-export"
 	"github.com/hovsep/fmesh/component"
-	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/port"
 	"github.com/hovsep/fmesh/signal"
 )

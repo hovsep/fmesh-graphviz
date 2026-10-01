@@ -8,8 +8,8 @@ Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as [D2](https://d2lang.
 - The output is deterministic: equal meshes give byte-identical source.
 - The export only reads the mesh. It never changes it.
 
-`New(opts...)` returns an `Exporter`. It implements fmesh's
-[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
+`New(opts...)` returns an `Exporter`. It implements this module's
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh-export), like every format in this
 module. It holds only its options: reuse one value for many meshes.
 
 ## Install

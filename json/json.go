@@ -6,9 +6,9 @@ import (
 	stdjson "encoding/json"
 
 	"github.com/hovsep/fmesh"
+	"github.com/hovsep/fmesh-export"
 	"github.com/hovsep/fmesh/component"
 	"github.com/hovsep/fmesh/cycle"
-	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/meta"
 	"github.com/hovsep/fmesh/port"
 )

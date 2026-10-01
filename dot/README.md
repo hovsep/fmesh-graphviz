@@ -7,8 +7,8 @@ Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as a [Graphviz DOT](htt
   and a legend shows the cycle stats. Put them together as an animation of the run.
 - **Configurable:** colors, shapes and layout.
 
-`New(opts...)` returns an `Exporter`. It implements fmesh's
-[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
+`New(opts...)` returns an `Exporter`. It implements this module's
+[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh-export), like every format in this
 module. It holds only its options: reuse one value for many meshes.
 See the [dot package docs](https://pkg.go.dev/github.com/hovsep/fmesh-export/dot) for the API.
 

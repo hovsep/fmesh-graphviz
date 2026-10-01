@@ -18,13 +18,13 @@ import (
 	"strings"
 
 	"github.com/hovsep/fmesh"
+	"github.com/hovsep/fmesh-export"
 	"github.com/hovsep/fmesh-export/d2"
 	"github.com/hovsep/fmesh-export/dot"
 	"github.com/hovsep/fmesh-export/json"
 	"github.com/hovsep/fmesh-export/mermaid"
 	"github.com/hovsep/fmesh-export/plantuml"
 	"github.com/hovsep/fmesh/component"
-	"github.com/hovsep/fmesh/export"
 	"github.com/hovsep/fmesh/port"
 )
 

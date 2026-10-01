@@ -11,9 +11,8 @@ one package per format:
 | [D2](https://d2lang.com) | [`d2`](d2) | `d2`, [play.d2lang.com](https://play.d2lang.com) |
 | [PlantUML](https://plantuml.com) | [`plantuml`](plantuml) | `plantuml -tpng`, plantuml.com server |
 
-Every exporter implements fmesh's
-[`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export) interface, so one format can
-replace another.
+Every exporter implements [`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh-export),
+the interface in this module's root package, so one format can replace another.
 
 ## Install
 
@@ -85,7 +84,7 @@ fm.SetupHooks(func(h *fmesh.Hooks) {
 Code that does not care about the format can take an `export.Exporter`:
 
 ```go
-import "github.com/hovsep/fmesh/export"
+import "github.com/hovsep/fmesh-export" // package export
 
 func save(e export.Exporter, fm *fmesh.FMesh) ([]byte, error) {
     return e.Export(fm)

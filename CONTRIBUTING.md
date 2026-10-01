@@ -18,7 +18,7 @@ Thanks for helping. Small, focused pull requests are easiest to review.
 
 ## Rules
 
-- **Same API in every format.** Every format implements fmesh's `export.Exporter`. A change to
+- **Same API in every format.** Every format implements the root package's `export.Exporter`. A change to
   the shared shape (`New`, options, `Export`, `ExportCycle`) goes into all formats in the same
   pull request.
 - **No state.** An `Exporter` holds only its options, so it can be reused and called from an
