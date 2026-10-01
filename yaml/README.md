@@ -87,5 +87,5 @@ results:
 ```
 
 - A component with no result in the cycle had no input: its code is `No input`.
-- A nil cycle returns `export.ErrNilCycle`.
+- A nil mesh returns `export.ErrNilMesh`, and a nil cycle `export.ErrNilCycle`.
 - To export each cycle while the mesh runs, call `ExportCycle` from an `AfterCycle` hook.
