@@ -12,6 +12,12 @@ Export an [F-Mesh](https://github.com/hovsep/fmesh) mesh as a [Graphviz DOT](htt
 module. It holds only its options: reuse one value for many meshes.
 See the [dot package docs](https://pkg.go.dev/github.com/hovsep/fmesh-export/dot) for the API.
 
+## Install
+
+```sh
+go get github.com/hovsep/fmesh-export/dot
+```
+
 ## Static graph
 
 ```go

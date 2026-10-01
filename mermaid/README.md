@@ -12,6 +12,12 @@ README with no extra tools.
 [`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh-export), like every format in this
 module. It holds only its options: reuse one value for many meshes.
 
+## Install
+
+```sh
+go get github.com/hovsep/fmesh-export/mermaid
+```
+
 ## Static chart
 
 ```go
@@ -28,9 +34,6 @@ if err := os.WriteFile("mesh.mmd", src, 0o644); err != nil {
     return err
 }
 ```
-
-Paste the source into a ```` ```mermaid ```` block in any markdown file, or into
-[mermaid.live](https://mermaid.live).
 
 ## Per-cycle charts
 
@@ -81,3 +84,10 @@ others keep their defaults.
 | `WithResultColor(code, color)` | Stroke color for one activation result code |
 
 `New` does not check the direction. `Export` and `ExportCycle` return an error for an unknown one.
+
+## Render
+
+- In markdown: paste the source into a ```` ```mermaid ```` block. GitHub and GitLab render it.
+- With [mermaid-cli](https://github.com/mermaid-js/mermaid-cli): `mmdc -i mesh.mmd -o mesh.svg`
+  (also `.png`, `.pdf`).
+- Online: paste the source into [mermaid.live](https://mermaid.live).
