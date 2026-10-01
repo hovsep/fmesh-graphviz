@@ -20,6 +20,7 @@ import (
 	"github.com/hovsep/fmesh"
 	"github.com/hovsep/fmesh-export/d2"
 	"github.com/hovsep/fmesh-export/dot"
+	"github.com/hovsep/fmesh-export/json"
 	"github.com/hovsep/fmesh-export/mermaid"
 	"github.com/hovsep/fmesh-export/plantuml"
 	"github.com/hovsep/fmesh/component"
@@ -35,6 +36,7 @@ type format struct {
 
 var formats = map[string]format{
 	"dot":      {"dot", dot.New()},
+	"json":     {"json", json.New()},
 	"mermaid":  {"mmd", mermaid.New()},
 	"d2":       {"d2", d2.New()},
 	"plantuml": {"puml", plantuml.New()},

@@ -10,7 +10,7 @@ README with no extra tools.
 
 `New(opts...)` returns an `Exporter`. It implements fmesh's
 [`export.Exporter`](https://pkg.go.dev/github.com/hovsep/fmesh/export), like every format in this
-module and `export.JSON()` in fmesh. It holds only its options: reuse one value for many meshes.
+module. It holds only its options: reuse one value for many meshes.
 
 ## Static chart
 
