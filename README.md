@@ -6,6 +6,7 @@ one package per format:
 | Format | Package | Render with |
 |---|---|---|
 | JSON | [`json`](json) | any JSON tool; unmarshal into `json.Mesh` / `json.Cycle` |
+| YAML | [`yaml`](yaml) | any YAML tool; unmarshal into `yaml.Mesh` / `yaml.Cycle` |
 | [Graphviz DOT](https://graphviz.org) | [`dot`](dot) | `dot -Tpng`, [edotor.net](https://edotor.net) |
 | [Mermaid](https://mermaid.js.org) | [`mermaid`](mermaid) | GitHub markdown, [mermaid.live](https://mermaid.live) |
 | [D2](https://d2lang.com) | [`d2`](d2) | `d2`, [play.d2lang.com](https://play.d2lang.com) |
