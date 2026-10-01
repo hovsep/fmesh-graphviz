@@ -17,7 +17,7 @@ the interface in this module's root package, so one format can replace another.
 ## Install
 
 ```bash
-go get github.com/hovsep/fmesh-export/mermaid  # or /json, /dot, /d2, /plantuml
+go get github.com/hovsep/fmesh-export/<format>  # e.g. /mermaid
 ```
 
 ## Usage
@@ -112,8 +112,9 @@ Run it locally: `go run ./internal/cmd/showcase -format d2 out`.
 
 ## Writing a new exporter
 
-Copy the [`d2`](d2) package: it is a complete exporter with the full set of tests. A new format
-`xyz` needs:
+Copy the [`d2`](d2) package: it is a complete exporter with the full set of tests. A new data
+format is smaller: build the documents with `internal/doc` and only encode them (add the format's
+struct tags to the types there). A new format `xyz` needs:
 
 1. **A package** `xyz/` with `xyz.go`, `xyz_test.go` and a `README.md`.
 2. **The shared shape**, the same as every other format:
@@ -143,7 +144,8 @@ Copy the [`d2`](d2) package: it is a complete exporter with the full set of test
 
    The `d2` tests cover all of these.
 5. **The showcase:** add the format to `formats` in [`internal/cmd/showcase`](internal/cmd/showcase/main.go).
-6. **CI:** copy `.github/workflows/d2.yml` to `xyz.yml`, and add an `xyz)` case to the
+6. **CI** (diagram formats only; data formats have nothing to render): copy
+   `.github/workflows/d2.yml` to `xyz.yml`, and add an `xyz)` case to the
    "Install renderer" and "Render images" steps of `render.yml`. Pin the renderer version and check
    its SHA-256 there.
 7. **Docs:** add a row to the format table and the live-example table above.
