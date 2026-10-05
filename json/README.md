@@ -36,8 +36,8 @@ data, err := json.New().Export(fm)
 }
 ```
 
-- Components and ports are in name order, pipes in wiring order. The same mesh always exports the
-  same bytes.
+- Components and ports are in name order. Pipes are grouped by source port, in the same order, and
+  each port's pipes are in wiring order. The same mesh always exports the same bytes.
 - `description` and `meta` are left out when empty. `components`, `inputs`, `outputs` and `pipes`
   are always present.
 - Unmarshal into `json.Mesh` to read it back.

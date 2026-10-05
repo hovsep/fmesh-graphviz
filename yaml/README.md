@@ -52,8 +52,9 @@ pipes:
       port: in
 ```
 
-- Components and ports are in name order, pipes in wiring order, metadata keys sorted. The same mesh
-  always exports the same bytes.
+- Components and ports are in name order, metadata keys sorted. Pipes are grouped by source port, in
+  the same order, and each port's pipes are in wiring order. The same mesh always exports the same
+  bytes.
 - `description` and `meta` are left out when empty. `components`, `inputs`, `outputs` and `pipes`
   are always present.
 - Names are quoted when YAML needs it (`a: b`, `#x`, `yes`, `null`, ...), so they read back as
